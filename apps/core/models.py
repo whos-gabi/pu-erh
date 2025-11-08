@@ -3,7 +3,7 @@ Django models for Office Smart Appointments Management System.
 """
 from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.constraints import ExclusionConstraint
-from django.contrib.postgres.fields import DateTimeRangeField
+from django.contrib.postgres.fields import ArrayField, DateTimeRangeField
 from django.contrib.postgres.indexes import GistIndex
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -24,6 +24,43 @@ class Role(models.Model):
         return self.name
 
 
+class OrgPolicy(models.Model):
+    """
+    Singleton model pentru politica organizațională de prezență.
+    
+    Există un singur rând care definește numărul default de zile obligatorii
+    de prezență fizică pe săptămână pentru toată organizația.
+    """
+    default_required_days_per_week = models.PositiveSmallIntegerField(
+        default=2,
+        help_text='Numărul default de zile obligatorii de prezență fizică pe săptămână'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'core_org_policy'
+        verbose_name = 'Organizational Policy'
+        verbose_name_plural = 'Organizational Policies'
+    
+    def save(self, *args, **kwargs):
+        """Asigură că există un singur rând (singleton pattern)."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        """Previne ștergerea policy-ului."""
+        pass
+    
+    @classmethod
+    def get_policy(cls):
+        """Returnează policy-ul organizațional (creează unul default dacă nu există)."""
+        policy, created = cls.objects.get_or_create(pk=1)
+        return policy
+    
+    def __str__(self) -> str:
+        return f'Org Policy: {self.default_required_days_per_week} zile/săptămână'
+
+
 class Team(models.Model):
     """Team/Department in the organization."""
     name = models.CharField(max_length=128, unique=True)
@@ -34,11 +71,35 @@ class Team(models.Model):
         blank=True,
         related_name='managed_teams',
     )
+    # Politica de prezență la nivel de echipă
+    required_days_per_week = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text='Numărul de zile obligatorii de prezență fizică pe săptămână pentru această echipă. '
+                  'Dacă este None, se folosește default-ul organizațional.'
+    )
+    required_weekdays = ArrayField(
+        models.IntegerField(),
+        null=True,
+        blank=True,
+        help_text='Lista opțională cu zilele din săptămână când angajații trebuie să fie prezenți. '
+                  '0=Luni, 1=Marți, ..., 6=Duminică. Dacă este None, nu există restricții pe zile specifice.'
+    )
 
     class Meta:
         db_table = 'core_team'
         verbose_name = 'Team'
         verbose_name_plural = 'Teams'
+
+    def get_required_days_per_week(self) -> int:
+        """
+        Returnează numărul de zile obligatorii pentru această echipă.
+        
+        Fallback: team override → org default
+        """
+        if self.required_days_per_week is not None:
+            return self.required_days_per_week
+        return OrgPolicy.get_policy().default_required_days_per_week
 
     def __str__(self) -> str:
         return self.name

@@ -12,6 +12,7 @@ from .models import (
     Item,
     Request,
     Appointment,
+    OrgPolicy,
 )
 
 
@@ -21,10 +22,25 @@ class RoleAdmin(admin.ModelAdmin):
     list_display = ('name',)
 
 
+@admin.register(OrgPolicy)
+class OrgPolicyAdmin(admin.ModelAdmin):
+    """Admin for OrgPolicy model."""
+    list_display = ('default_required_days_per_week', 'updated_at')
+    
+    def has_add_permission(self, request):
+        """Previne crearea de multiple policy-uri."""
+        return not OrgPolicy.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        """Previne ștergerea policy-ului."""
+        return False
+
+
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
     """Admin for Team model."""
-    list_display = ('name', 'manager')
+    list_display = ('name', 'manager', 'required_days_per_week', 'required_weekdays')
+    list_filter = ('required_days_per_week',)
 
 
 @admin.register(User)

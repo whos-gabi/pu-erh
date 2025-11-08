@@ -20,6 +20,9 @@ from apps.core.viewsets import (
     RequestViewSet,
     AppointmentViewSet,
 )
+from apps.core.policy_views import (
+    OrgPolicyViewSet,
+)
 from apps.core.auth_views import (
     MeViewSet,
     UserViewSet,
@@ -32,6 +35,8 @@ router = DefaultRouter()
 router.register(r'me', MeViewSet, basename='me')
 # Utilizatori
 router.register(r'users', UserViewSet, basename='user')
+# Policy organizațională
+router.register(r'policy', OrgPolicyViewSet, basename='policy')
 # Resurse principale
 router.register(r'roles', RoleViewSet, basename='role')
 router.register(r'teams', TeamViewSet, basename='team')
