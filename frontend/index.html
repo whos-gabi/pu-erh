@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Leaflet Floor Plan</title>
+    <meta charset="utf-t" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* 2. Set a height for your map container */
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        #map {
+            height: 100vh;
+            /* Full screen height */
+            width: 100%;
+            background: #f0f0f0;
+            /* Light gray background */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="map"></div>
+
+    <script>
+        // 4. All our JavaScript goes here
+
+        // --- MAP SETUP ---
+
+        // Get image dimensions (change these to your image's dimensions)
+        const imgWidth = 1000;
+        const imgHeight = 800;
+
+        // Initialize the map
+        // We use L.CRS.Simple for a non-geographical map
+        const map = L.map('map', {
+            crs: L.CRS.Simple, // Use simple x,y coordinates
+            minZoom: -1, // Allows zooming out
+            maxZoom: 2   // Allows zooming in
+        });
+
+        // Define the image bounds. 
+        // Leaflet uses [y, x] (or [lat, lng]) syntax.
+        // So [0, 0] is the top-left, and [imgHeight, imgWidth] is the bottom-right.
+        const bounds = [[0, 0], [imgHeight, imgWidth]];
+
+        // Add the image overlay
+        const imageUrl = 'floorplan.png'; // Your image file
+        L.imageOverlay(imageUrl, bounds).addTo(map);
+
+        // Fit the map to the image bounds
+        map.fitBounds(bounds);
+
+
+        // --- INTERACTIVE ROOMS ---
+        // Now, you add polygons for your rooms.
+        // The coordinates are [y, x] from the top-left corner of your image.
+
+        // Example: A polygon for "Room 101"
+        const room101Coords = [
+            [400, 300], // [y, x]
+            [400, 500],
+            [550, 500],
+            [550, 300]
+        ];
+        const room101 = L.polygon(room101Coords, {
+            color: 'blue',
+            fillOpacity: 0.3
+        }).addTo(map);
+
+        // Add a popup to the room
+        room101.bindPopup("<b>Room 101</b><br>Conference Room");
+
+
+        // Example: A marker for the "Lobby"
+        const lobbyCoords = [650, 600]; // [y, x]
+        const lobby = L.marker(lobbyCoords).addTo(map);
+
+        lobby.bindPopup("<b>Main Lobby</b>");
+
+        // --- HELPER TO FIND COORDINATES ---
+        // Add this after your map setup
+        map.on('click', function (e) {
+            // e.latlng contains the [y, x] coordinates
+            console.log('Clicked at:', e.latlng);
+        });
+    </script>
+
+</body>
+
+</html>
