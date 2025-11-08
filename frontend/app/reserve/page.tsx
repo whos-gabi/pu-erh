@@ -54,7 +54,7 @@ export default function ReservePage() {
     const groups = Array.from(svg.querySelectorAll("g"));
 
     groups.forEach((g, idx) => {
-      (g as HTMLElement).style.cursor = "pointer";
+      (g as unknown as HTMLElement).style.cursor = "pointer";
       g.setAttribute("data-seat-label", g.getAttribute("id") || `G-${idx + 1}`);
 
       const handleEnter = () => {
