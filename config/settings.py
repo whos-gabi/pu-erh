@@ -2,6 +2,7 @@
 Django settings for Office Smart Appointments Management System.
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -34,6 +35,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'apps.core',
+    'apps.notify',  # Sistem de notificări prin email
 ]
 
 MIDDLEWARE = [
@@ -51,7 +53,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # Director pentru template-uri globale
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -70,14 +72,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# Database configuration - folosește variabile de mediu pentru Docker
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'office_appointments',
-        'USER': 'postgres',
-        'PASSWORD': 'postgres',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get('POSTGRES_DB', 'office_appointments'),
+        'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
 

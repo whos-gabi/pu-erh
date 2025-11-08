@@ -1,0 +1,16 @@
+Salut {{ user.first_name }},
+
+Statusul cererii tale de rezervare a fost actualizat:
+
+• Camera: {{ room.code }} – {{ room.name }}
+• Status: {{ status_display }}
+{% if note %}
+• Notă: {{ note }}
+{% endif %}
+{% if decided_by %}
+• Decis de: {{ decided_by }}
+{% endif %}
+
+Mulțumim,
+Molson Coors – Smart Appointments
+

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #1a5490; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f9f9f9; }
+        .status-box { background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid {% if status == 'APPROVED' %}#28a745{% elif status == 'DISMISSED' %}#dc3545{% else %}#1a5490{% endif %}; }
+        .status-badge { display: inline-block; padding: 5px 10px; border-radius: 3px; font-weight: bold; }
+        .status-approved { background-color: #28a745; color: white; }
+        .status-dismissed { background-color: #dc3545; color: white; }
+        .status-waiting { background-color: #ffc107; color: #333; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Status Cerere Rezervare</h1>
+        </div>
+        <div class="content">
+            <p>Salut {{ user.first_name }},</p>
+            <p>Statusul cererii tale de rezervare a fost actualizat:</p>
+            
+            <div class="status-box">
+                <p><strong>Camera:</strong> {{ room.code }} – {{ room.name }}</p>
+                <p><strong>Status:</strong> 
+                    <span class="status-badge status-{{ status|lower }}">
+                        {{ status_display }}
+                    </span>
+                </p>
+                {% if note %}
+                <p><strong>Notă:</strong> {{ note }}</p>
+                {% endif %}
+                {% if decided_by %}
+                <p><strong>Decis de:</strong> {{ decided_by }}</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="footer">
+            <p>Mulțumim,<br>Molson Coors – Smart Appointments</p>
+        </div>
+    </div>
+</body>
+</html>
+

@@ -15,6 +15,11 @@ from django.db.models.functions import TruncDate
 from .models import Request, Appointment, ItemCategory, OrgPolicy
 from .api import RequestSerializer, AppointmentSerializer
 from .permissions import IsSuperAdmin, IsOwnerOrSuperAdmin
+from apps.notify.services import (
+    notify_appointment_summary,
+    notify_request_status,
+    notify_desk_release_batch,
+)
 
 
 @extend_schema_view(
@@ -106,6 +111,10 @@ class RequestViewSet(viewsets.ModelViewSet):
         request_obj.decided_by = request.user
         request_obj.save()
         
+        # Trimite notificare prin email după ce statusul este schimbat
+        from django.db import transaction
+        transaction.on_commit(lambda: notify_request_status(request_obj))
+        
         serializer = self.get_serializer(request_obj)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
@@ -128,6 +137,10 @@ class RequestViewSet(viewsets.ModelViewSet):
         request_obj.status = Request.DISMISSED
         request_obj.decided_by = request.user
         request_obj.save()
+        
+        # Trimite notificare prin email după ce statusul este schimbat
+        from django.db import transaction
+        transaction.on_commit(lambda: notify_request_status(request_obj))
         
         serializer = self.get_serializer(request_obj)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -173,9 +186,15 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         """Creează programarea (doar SUPERADMIN)."""
         # User-ul poate fi setat din serializer sau implicit din request
         if 'user' not in serializer.validated_data:
-            serializer.save(user=self.request.user)
+            appointment = serializer.save(user=self.request.user)
         else:
-            serializer.save()
+            appointment = serializer.save()
+        
+        # Trimite notificare prin email după ce appointment-ul este creat cu succes
+        # Folosim transaction.on_commit pentru a ne asigura că appointment-ul este salvat
+        # înainte de a trimite email-ul
+        from django.db import transaction
+        transaction.on_commit(lambda: notify_appointment_summary(appointment))
     
     @extend_schema(
         tags=['Appointments'],
@@ -327,11 +346,26 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                     ]
                 })
         
-        return Response({
+        response_data = {
             'date': target_date.isoformat(),
             'week_start': week_start.isoformat(),
             'week_end': week_end.isoformat(),
             'over_quota_users': over_quota_users,
             'total_over_quota': len(over_quota_users),
-        })
+        }
+        
+        # Trimite notificări prin email pentru utilizatorii over-quota
+        # Notă: În producție, ar trebui să existe un user care cere eliberarea
+        # Pentru moment, folosim request.user (cel care face request-ul)
+        if over_quota_users and request.user:
+            from django.db import transaction
+            transaction.on_commit(
+                lambda: notify_desk_release_batch(
+                    target_date,
+                    over_quota_users,
+                    request.user
+                )
+            )
+        
+        return Response(response_data)
 
