@@ -7,6 +7,7 @@ from .models import (
     Role,
     Team,
     User,
+    RoomCategory,
     Room,
     ItemCategory,
     Item,
@@ -56,11 +57,18 @@ class UserAdmin(BaseUserAdmin):
     )
 
 
+@admin.register(RoomCategory)
+class RoomCategoryAdmin(admin.ModelAdmin):
+    """Admin for RoomCategory model."""
+    list_display = ('code', 'name')
+    search_fields = ('code', 'name')
+
+
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
     """Admin for Room model."""
-    list_display = ('code', 'name', 'capacity', 'is_active')
-    list_filter = ('is_active',)
+    list_display = ('code', 'name', 'category', 'capacity')
+    list_filter = ('category',)
     search_fields = ('code', 'name')
 
 
@@ -83,7 +91,7 @@ class ItemAdmin(admin.ModelAdmin):
 @admin.register(Request)
 class RequestAdmin(admin.ModelAdmin):
     """Admin for Request model."""
-    list_display = ('id', 'room', 'user', 'status', 'created_at', 'decided_by')
+    list_display = ('id', 'room', 'user', 'status', 'date_start', 'date_end', 'created_at', 'decided_by')
     list_filter = ('status', 'created_at')
     search_fields = ('room__code', 'user__username')
     readonly_fields = ('created_at', 'status_changed_at')

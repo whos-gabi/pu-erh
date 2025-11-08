@@ -100,10 +100,13 @@ else:
     print(f"✓ Cameră găsită: {room.code} - {room.name}")
     
     # Creează o cerere
+    now = timezone.now()
     request_obj = Request.objects.create(
         user=user,
         room=room,
-        status=Request.WAITING
+        status=Request.WAITING,
+        date_start=now + timedelta(days=1),
+        date_end=now + timedelta(days=1, hours=4)
     )
     
     print(f"✓ Request creat: ID={request_obj.id}, Status=WAITING")

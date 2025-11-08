@@ -138,21 +138,36 @@ class User(AbstractUser):
         return self.username
 
 
+class RoomCategory(models.Model):
+    """Category for rooms (Meeting Room, Beer Point, Training Room)."""
+    name = models.CharField(max_length=64, unique=True)
+    code = models.CharField(max_length=32, unique=True)  # e.g., "MEETING", "BEER", "TRAINING"
+    
+    class Meta:
+        db_table = 'core_room_category'
+        verbose_name = 'Room Category'
+        verbose_name_plural = 'Room Categories'
+    
+    def __str__(self) -> str:
+        return self.name
+
+
 class Room(models.Model):
     """Room that can be reserved through Request."""
     code = models.CharField(max_length=32, unique=True)  # e.g., "B1-203"
     name = models.CharField(max_length=128)
+    category = models.ForeignKey(
+        RoomCategory,
+        on_delete=models.PROTECT,
+        related_name='rooms',
+    )
     capacity = models.IntegerField(null=True, blank=True)
     features = models.JSONField(default=dict, blank=True)  # e.g., {"projector": True}
-    is_active = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'core_room'
         verbose_name = 'Room'
         verbose_name_plural = 'Rooms'
-        indexes = [
-            models.Index(fields=['is_active']),
-        ]
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
@@ -244,6 +259,8 @@ class Request(models.Model):
         choices=STATUS_CHOICES,
         default=WAITING,
     )
+    date_start = models.DateTimeField()
+    date_end = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     status_changed_at = models.DateTimeField(auto_now=True)
     decided_by = models.ForeignKey(
@@ -262,9 +279,22 @@ class Request(models.Model):
         indexes = [
             models.Index(fields=['status', 'created_at']),
         ]
+        constraints = [
+            CheckConstraint(
+                check=Q(date_end__gt=F('date_start')),
+                name='request_date_end_after_date_start',
+            ),
+        ]
 
     def clean(self) -> None:
-        """Validate that only SUPERADMIN (is_superuser=True) can approve/dismiss requests."""
+        """Validate request data."""
+        # Validate that end_at is after start_at
+        if self.date_end <= self.date_start:
+            raise ValidationError(
+                {'date_end': 'date_end must be after date_start.'}
+            )
+        
+        # Validate that only SUPERADMIN (is_superuser=True) can approve/dismiss requests
         if self.status in {self.APPROVED, self.DISMISSED}:
             if not self.decided_by:
                 raise ValidationError(

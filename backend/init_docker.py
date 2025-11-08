@@ -40,7 +40,8 @@ def main():
     
     print("📦 Creez date de test...")
     try:
-        call_command('seed_data', verbosity=1)
+        # Folosim --clear pentru a șterge datele vechi și a crea altele noi
+        call_command('seed_data', '--clear', verbosity=1)
     except Exception as e:
         # Dacă seed_data eșuează (ex: date deja existente sau suprapuneri),
         # continuăm oricum - aplicația poate funcționa fără date de test

@@ -16,6 +16,7 @@ import random
 from apps.core.models import (
     Role,
     Team,
+    RoomCategory,
     Room,
     ItemCategory,
     Item,
@@ -47,14 +48,15 @@ class Command(BaseCommand):
         roles = self.create_roles()
         teams = self.create_teams()
         users = self.create_users(teams, roles)
-        rooms = self.create_rooms()
+        room_categories = self.create_room_categories()
+        rooms = self.create_rooms(room_categories)
         categories = self.create_item_categories()
         items = self.create_items(rooms, categories)
         requests = self.create_requests(users, rooms)
         appointments = self.create_appointments(users, items, requests)
         
         self.stdout.write(self.style.SUCCESS('\n[OK] Date de test create cu succes!'))
-        self.print_summary(roles, teams, users, rooms, categories, items, requests, appointments)
+        self.print_summary(roles, teams, users, room_categories, rooms, categories, items, requests, appointments)
 
     def clear_data(self):
         """Șterge toate datele (păstrând doar superadmin)."""
@@ -63,6 +65,7 @@ class Command(BaseCommand):
         Item.objects.all().delete()
         ItemCategory.objects.all().delete()
         Room.objects.all().delete()
+        RoomCategory.objects.all().delete()
         # Nu ștergem User-ii (păstrăm superadmin)
         Team.objects.all().delete()
         Role.objects.all().delete()
@@ -112,6 +115,25 @@ class Command(BaseCommand):
                 self.stdout.write(f'    [+] Creat: {team.name}')
         
         return teams
+
+    def create_room_categories(self):
+        """Creează categorii de camere."""
+        self.stdout.write('  [*] Creez categorii de camere...')
+        
+        categories_data = [
+            {'name': 'Meeting Room', 'code': 'MEETING'},
+            {'name': 'Beer Point', 'code': 'BEER'},
+            {'name': 'Training Room', 'code': 'TRAINING'},
+        ]
+        
+        categories = []
+        for cat_data in categories_data:
+            category, created = RoomCategory.objects.get_or_create(**cat_data)
+            categories.append(category)
+            if created:
+                self.stdout.write(f'    [+] Creat: {category.name} ({category.code})')
+        
+        return categories
 
     def create_users(self, teams, roles):
         """Creează utilizatori (Employee-uri)."""
@@ -181,53 +203,79 @@ class Command(BaseCommand):
         
         return users
 
-    def create_rooms(self):
+    def create_rooms(self, room_categories):
         """Creează camere."""
         self.stdout.write('  [*] Creez camere...')
         
+        # Găsește categoriile
+        training_category = next((c for c in room_categories if c.code == 'TRAINING'), None)
+        meeting_category = next((c for c in room_categories if c.code == 'MEETING'), None)
+        beer_category = next((c for c in room_categories if c.code == 'BEER'), None)
+        
         rooms_data = [
             {
-                'code': 'B1-101',
-                'name': 'Sala de conferinte A',
-                'capacity': 20,
-                'features': {'projector': True, 'whiteboard': True, 'video_conference': True},
-                'is_active': True,
+                'code': 'tr1',
+                'name': 'Training Room 1',
+                'category': training_category,
+                'capacity': 18,
+                'features': {'projector': True, 'whiteboard': True}
             },
             {
-                'code': 'B1-102',
-                'name': 'Sala de conferinte B',
-                'capacity': 15,
-                'features': {'projector': True, 'whiteboard': True},
-                'is_active': True,
+                'code': 'tr2',
+                'name': 'Training Room 2',
+                'category': training_category,
+                'capacity': 19,
+                'features': {'projector': True, 'whiteboard': True}
             },
             {
-                'code': 'B1-203',
-                'name': 'Birou individual 1',
-                'capacity': 1,
-                'features': {'desk': True, 'monitor': True},
-                'is_active': True,
+                'code': 'mr1',
+                'name': 'Meeting Room 1',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
             },
             {
-                'code': 'B1-204',
-                'name': 'Birou individual 2',
-                'capacity': 1,
-                'features': {'desk': True, 'monitor': True},
-                'is_active': True,
+                'code': 'mr2',
+                'name': 'Meeting Room 2',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
             },
             {
-                'code': 'B2-301',
-                'name': 'Sala de training',
-                'capacity': 30,
-                'features': {'projector': True, 'whiteboard': True, 'computers': 15},
-                'is_active': True,
+                'code': 'mr3',
+                'name': 'Meeting Room 3',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
             },
             {
-                'code': 'B2-302',
-                'name': 'Sala inactiva',
-                'capacity': 10,
-                'features': {},
-                'is_active': False,  # Cameră inactivă pentru testare
+                'code': 'mr4',
+                'name': 'Meeting Room 4',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
             },
+            {
+                'code': 'mr5',
+                'name': 'Meeting Room 5',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
+            },
+            {
+                'code': 'mr6',
+                'name': 'Meeting Room 6',
+                'category': meeting_category,
+                'capacity': 4,
+                'features': {}
+            },
+            {
+                'code': 'bp',
+                'name': 'Beer Point',
+                'category': beer_category,
+                'capacity': 100,
+                'features': {'beer_tap': True, 'snacks': True, 'fridge': True}
+            }
         ]
         
         rooms = []
@@ -316,6 +364,7 @@ class Command(BaseCommand):
         
         # Creează cereri cu statusuri diferite
         requests = []
+        now = timezone.now()
         
         # Cereri WAITING (în așteptare)
         for i, user in enumerate(users[:2]):  # Primele 2 utilizatori
@@ -323,6 +372,8 @@ class Command(BaseCommand):
                 user=user,
                 room=rooms[i % len(rooms)],
                 status=Request.WAITING,
+                date_start=now + timedelta(days=i+1),
+                date_end=now + timedelta(days=i+1, hours=4),
                 note=f'Cerere de test #{i+1}',
             )
             requests.append(request)
@@ -334,6 +385,8 @@ class Command(BaseCommand):
                 user=user,
                 room=rooms[(i+1) % len(rooms)],
                 status=Request.APPROVED,
+                date_start=now + timedelta(days=i+2),
+                date_end=now + timedelta(days=i+2, hours=4),
                 decided_by=superadmin,
                 note=f'Cerere aprobata #{i+1}',
             )
@@ -346,6 +399,8 @@ class Command(BaseCommand):
                 user=users[2],
                 room=rooms[2],
                 status=Request.DISMISSED,
+                date_start=now + timedelta(days=3),
+                date_end=now + timedelta(days=3, hours=4),
                 decided_by=superadmin,
                 note='Cerere respinsa pentru testare',
             )
@@ -421,7 +476,7 @@ class Command(BaseCommand):
         
         return appointments
 
-    def print_summary(self, roles, teams, users, rooms, categories, items, requests, appointments):
+    def print_summary(self, roles, teams, users, room_categories, rooms, categories, items, requests, appointments):
         """Afișează un rezumat al datelor create."""
         self.stdout.write('\n' + '=' * 60)
         self.stdout.write(self.style.SUCCESS('REZUMAT DATE CREATE:'))
@@ -429,6 +484,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Roles: {len(roles)}')
         self.stdout.write(f'  Teams: {len(teams)}')
         self.stdout.write(f'  Users (Employee): {len(users)}')
+        self.stdout.write(f'  Room Categories: {len(room_categories)}')
         self.stdout.write(f'  Rooms: {len(rooms)}')
         self.stdout.write(f'  Item Categories: {len(categories)}')
         self.stdout.write(f'  Items: {len(items)}')

@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import (
     Role,
     Team,
+    RoomCategory,
     Room,
     ItemCategory,
     Item,
@@ -47,11 +48,21 @@ class TeamSerializer(serializers.ModelSerializer):
         )
 
 
+class RoomCategorySerializer(serializers.ModelSerializer):
+    """Serializer for RoomCategory model."""
+    class Meta:
+        model = RoomCategory
+        fields = ['id', 'code', 'name']
+
+
 class RoomSerializer(serializers.ModelSerializer):
     """Serializer for Room model."""
+    category = serializers.PrimaryKeyRelatedField(queryset=RoomCategory.objects.all())
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
     class Meta:
         model = Room
-        fields = ['id', 'code', 'name', 'capacity', 'features', 'is_active']
+        fields = ['id', 'code', 'name', 'category', 'category_name', 'capacity', 'features']
 
 
 class ItemCategorySerializer(serializers.ModelSerializer):
@@ -82,14 +93,18 @@ class RequestSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
     room_code = serializers.CharField(source='room.code', read_only=True)
+    room_name = serializers.CharField(source='room.name', read_only=True)
+    room_category_id = serializers.IntegerField(source='room.category.id', read_only=True)
+    room_category_name = serializers.CharField(source='room.category.name', read_only=True)
     decided_by = serializers.StringRelatedField(read_only=True)
-    # Pentru request-uri, categoria este asociată cu item-urile din cameră
-    # Vom adăuga un câmp pentru a indica categoria principală a camerei (dacă există)
-    # sau categoria primului item asociat (dacă există)
     
     class Meta:
         model = Request
-        fields = ['id', 'user', 'room', 'room_code', 'status', 'created_at', 'status_changed_at', 'decided_by', 'note']
+        fields = [
+            'id', 'user', 'room', 'room_code', 'room_name', 
+            'room_category_id', 'room_category_name',
+            'status', 'date_start', 'date_end', 'created_at', 'status_changed_at', 'decided_by', 'note'
+        ]
         read_only_fields = ['user', 'created_at', 'status_changed_at', 'decided_by']
 
 
@@ -276,6 +291,32 @@ class TeamViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(team)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=['RoomCategories'], summary='Listează toate categoriile de camere'),
+    retrieve=extend_schema(tags=['RoomCategories'], summary='Obține detalii despre o categorie de camere'),
+    create=extend_schema(tags=['RoomCategories'], summary='Creează o categorie de camere nouă'),
+    update=extend_schema(tags=['RoomCategories'], summary='Actualizează o categorie de camere'),
+    destroy=extend_schema(tags=['RoomCategories'], summary='Șterge o categorie de camere'),
+)
+class RoomCategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet pentru gestionarea categoriilor de camere.
+    
+    Permisiuni:
+    - GET: toți utilizatorii autentificați
+    - POST/PUT/DELETE: doar SUPERADMIN
+    """
+    queryset = RoomCategory.objects.all()
+    serializer_class = RoomCategorySerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        """Permisiuni diferite pentru acțiuni diferite."""
+        if self.action in ['create', 'update', 'destroy']:
+            return [IsSuperAdmin()]
+        return super().get_permissions()
 
 
 @extend_schema_view(

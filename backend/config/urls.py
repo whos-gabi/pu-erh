@@ -12,6 +12,7 @@ from rest_framework.routers import DefaultRouter
 from apps.core.api import (
     RoleViewSet,
     TeamViewSet,
+    RoomCategoryViewSet,
     RoomViewSet,
     ItemCategoryViewSet,
     ItemViewSet,
@@ -40,6 +41,7 @@ router.register(r'policy', OrgPolicyViewSet, basename='policy')
 # Resurse principale
 router.register(r'roles', RoleViewSet, basename='role')
 router.register(r'teams', TeamViewSet, basename='team')
+router.register(r'room-categories', RoomCategoryViewSet, basename='roomcategory')
 router.register(r'rooms', RoomViewSet, basename='room')
 router.register(r'item-categories', ItemCategoryViewSet, basename='itemcategory')
 router.register(r'items', ItemViewSet, basename='item')
