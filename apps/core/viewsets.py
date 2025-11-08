@@ -368,4 +368,77 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             )
         
         return Response(response_data)
+    
+    @extend_schema(
+        tags=['Appointments'],
+        summary='Listează toate appointment-urile dintr-o anumită dată',
+        description='Returnează toate appointment-urile din ziua specificată.',
+        parameters=[
+            OpenApiParameter(
+                name='date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Data pentru care se caută appointment-urile (format: YYYY-MM-DD). Ex: 2024-01-15'
+            ),
+        ],
+        responses={
+            200: {
+                'description': 'Lista appointment-urilor din ziua specificată',
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'object',
+                            'properties': {
+                                'date': {'type': 'string', 'format': 'date'},
+                                'appointments': {
+                                    'type': 'array',
+                                    'items': {'type': 'object'}
+                                },
+                                'total': {'type': 'integer'}
+                            }
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Parametrul date lipsă sau format invalid'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='by-date')
+    def by_date(self, request):
+        """
+        Returnează toate appointment-urile din ziua specificată.
+        """
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response(
+                {'error': 'Parametrul "date" este obligatoriu (format: YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Format invalid pentru date. Folosește YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Filtrează appointment-urile din ziua specificată
+        appointments = Appointment.objects.filter(
+            start_at__date=target_date
+        ).select_related('user', 'item', 'item__category', 'request')
+        
+        # Aplică permisiunile: Employee vede doar propriile, SUPERADMIN vede toate
+        user = request.user
+        if not user.is_superuser:
+            appointments = appointments.filter(user=user)
+        
+        serializer = self.get_serializer(appointments, many=True)
+        
+        return Response({
+            'date': target_date.isoformat(),
+            'appointments': serializer.data,
+            'total': len(serializer.data)
+        })
 

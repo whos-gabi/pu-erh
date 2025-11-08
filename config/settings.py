@@ -171,3 +171,44 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
+# Email Settings
+# Pentru development, folosim console backend (email-urile se afișează în consolă)
+# Pentru producție, configurează SMTP sau un serviciu extern (SendGrid, AWS SES, etc.)
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend'  # Development: afișează în consolă
+)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@molsoncoors.com')
+
+# Pentru producție, configurează SMTP:
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.example.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@example.com'
+# EMAIL_HOST_PASSWORD = 'your-password'
+
+# Celery Configuration
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minute
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minute
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+
+# Celery Beat Schedule (task-uri periodice)
+CELERY_BEAT_SCHEDULE = {
+    'process-email-queue': {
+        'task': 'notify.process_email_queue',
+        'schedule': 60.0,  # Rulează la fiecare 60 de secunde (1 minut)
+        'options': {
+            'expires': 30.0,  # Task-ul expiră după 30 de secunde dacă nu e preluat
+        }
+    },
+}
+
