@@ -1,0 +1,45 @@
+/* styles/InteractiveMap.module.css */
+
+/* This makes the mouse turn into a pointer on hover */
+.clickable {
+  cursor: pointer;
+}
+
+/* This styles the children (paths, rects) of the group on hover
+   Avoid overriding selected state while hovering */
+.clickable:not(.selected):hover path,
+.clickable:not(.selected):hover rect,
+.clickable:not(.selected):hover circle {
+  fill: #0056b3 !important; /* slightly darker blue */
+  fill-opacity: 0.45 !important;
+  transition: fill 0.2s ease;
+}
+
+/* Also apply to the element itself (paths/rects used for Areas) */
+.clickable:not(.selected):hover {
+  fill: #0056b3 !important;
+  fill-opacity: 0.45 !important;
+}
+
+/* This is your "selected" style (apply to all descendants) */
+.selected path,
+.selected rect,
+.selected circle {
+  fill: #007bff !important; /* Blue highlight */
+  stroke: none; /* No border */
+  fill-opacity: 1 !important; /* Ensure solid when selected */
+}
+
+/* Selected state for Areas (semi-transparent accent) */
+.areaSelected,
+.areaSelected path,
+.areaSelected rect,
+.areaSelected circle,
+.areaSelected ellipse,
+.areaSelected polygon {
+  fill: #007bff !important; /* brighter than hover */
+  fill-opacity: 0.45 !important; /* slightly brighter than hover */
+  stroke: none !important;
+}
+
+
