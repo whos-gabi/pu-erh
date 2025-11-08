@@ -188,6 +188,8 @@ class Item(models.Model):
         Room,
         on_delete=models.PROTECT,
         related_name='items',
+        null=True,
+        blank=True,
     )
     category = models.ForeignKey(
         ItemCategory,
@@ -211,7 +213,9 @@ class Item(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.name} ({self.room.code})"
+        if self.room:
+            return f"{self.name} ({self.room.code})"
+        return f"{self.name}"
 
 
 class Request(models.Model):

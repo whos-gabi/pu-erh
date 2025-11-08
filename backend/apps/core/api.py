@@ -63,9 +63,13 @@ class ItemCategorySerializer(serializers.ModelSerializer):
 
 class ItemSerializer(serializers.ModelSerializer):
     """Serializer for Item model."""
-    room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
+    room = serializers.PrimaryKeyRelatedField(
+        queryset=Room.objects.all(),
+        required=False,
+        allow_null=True
+    )
     category = serializers.PrimaryKeyRelatedField(queryset=ItemCategory.objects.all())
-    room_code = serializers.CharField(source='room.code', read_only=True)
+    room_code = serializers.CharField(source='room.code', read_only=True, allow_null=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     
     class Meta:
@@ -79,6 +83,9 @@ class RequestSerializer(serializers.ModelSerializer):
     room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
     room_code = serializers.CharField(source='room.code', read_only=True)
     decided_by = serializers.StringRelatedField(read_only=True)
+    # Pentru request-uri, categoria este asociată cu item-urile din cameră
+    # Vom adăuga un câmp pentru a indica categoria principală a camerei (dacă există)
+    # sau categoria primului item asociat (dacă există)
     
     class Meta:
         model = Request
@@ -90,6 +97,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
     """Serializer for Appointment model."""
     item = serializers.PrimaryKeyRelatedField(queryset=Item.objects.all())
     item_name = serializers.CharField(source='item.name', read_only=True)
+    item_category = serializers.PrimaryKeyRelatedField(source='item.category', read_only=True)
+    item_category_name = serializers.CharField(source='item.category.name', read_only=True)
     request = serializers.PrimaryKeyRelatedField(
         queryset=Request.objects.all(),
         required=False,
@@ -99,7 +108,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Appointment
-        fields = ['id', 'user', 'username', 'item', 'item_name', 'start_at', 'end_at', 'created_at', 'request']
+        fields = ['id', 'user', 'username', 'item', 'item_name', 'item_category', 'item_category_name', 'start_at', 'end_at', 'created_at', 'request']
         read_only_fields = ['created_at']
     
     def __init__(self, *args, **kwargs):

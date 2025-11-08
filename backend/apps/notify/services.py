@@ -90,8 +90,10 @@ def notify_appointment_summary(appointment):
             "code": appointment.item.room.code,
             "name": appointment.item.room.name,
         },
-        "start_at": appointment.start_at.isoformat(),
-        "end_at": appointment.end_at.isoformat(),
+        "start_at": appointment.start_at.strftime('%d.%m.%Y %H:%M'),
+        "end_at": appointment.end_at.strftime('%d.%m.%Y %H:%M'),
+        "start_at_iso": appointment.start_at.isoformat(),  # Pentru compatibilitate
+        "end_at_iso": appointment.end_at.isoformat(),  # Pentru compatibilitate
     }
     
     # Creează mesajul în outbox (sau îl găsește dacă există deja - idempotency)

@@ -9,9 +9,12 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from .serializers import UserProfileSerializer, UserSerializer, UserCreateSerializer, UserUpdateSerializer
 from .permissions import IsSuperAdmin, IsOwnerOrSuperAdmin
+from .models import Appointment, Request
+from .api import AppointmentSerializer, RequestSerializer
 
 User = get_user_model()
 
@@ -99,7 +102,9 @@ class MeViewSet(viewsets.ModelViewSet):
     ),
     retrieve=extend_schema(
         summary="Obține detalii despre un utilizator",
-        description="Employee poate vedea doar propriul profil.",
+        description="Employee poate vedea doar propriul profil. Returnează informații despre utilizator, "
+                    "inclusiv appointments și requests împărțite în trecut/prezent, categoria item-ului "
+                    "pentru fiecare appointment și request, și detalii despre echipă (echipa, coechipieri, manager).",
         tags=['Users'],
     ),
     create=extend_schema(
@@ -168,4 +173,132 @@ class UserViewSet(viewsets.ModelViewSet):
         
         # Employee vede doar propriul profil
         return User.objects.filter(id=user.id)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Returnează detalii despre utilizator, inclusiv:
+        - Appointments și requests împărțite în trecut/prezent
+        - Categoria item-ului pentru fiecare appointment și request
+        - Detalii despre echipă (echipa, coechipieri, manager)
+        """
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        data = serializer.data
+        
+        # Obține toate appointment-urile și request-urile utilizatorului
+        now = timezone.now()
+        
+        # Appointments
+        all_appointments = Appointment.objects.filter(
+            user=instance
+        ).select_related('item', 'item__category', 'request', 'user')
+        
+        # Requests
+        all_requests = Request.objects.filter(
+            user=instance
+        ).select_related('room', 'decided_by').prefetch_related('appointments', 'appointments__item', 'appointments__item__category')
+        
+        # Împarte appointments în trecut și prezent
+        past_appointments = all_appointments.filter(end_at__lt=now)
+        present_appointments = all_appointments.filter(end_at__gte=now)
+        
+        # Serializează appointments
+        past_appointments_data = AppointmentSerializer(past_appointments, many=True).data
+        present_appointments_data = AppointmentSerializer(present_appointments, many=True).data
+        
+        # Pentru requests, trebuie să determinăm categoria
+        # O request este pentru o cameră, dar categoria vine de la item-urile din cameră
+        # sau de la appointment-urile asociate cu request-ul
+        def get_request_category(request_obj):
+            """Obține categoria pentru un request."""
+            # Încearcă să obțină categoria din appointment-urile asociate (folosind prefetch)
+            appointments_for_request = request_obj.appointments.all()
+            if appointments_for_request.exists():
+                first_appointment = appointments_for_request[0]
+                if first_appointment.item and first_appointment.item.category:
+                    return {
+                        'id': first_appointment.item.category.id,
+                        'name': first_appointment.item.category.name,
+                        'slug': first_appointment.item.category.slug
+                    }
+            
+            # Dacă nu există appointment-uri, încearcă să obțină categoria din primul item al camerei
+            if request_obj.room:
+                first_item = request_obj.room.items.select_related('category').first()
+                if first_item and first_item.category:
+                    return {
+                        'id': first_item.category.id,
+                        'name': first_item.category.name,
+                        'slug': first_item.category.slug
+                    }
+            
+            return None
+        
+        # Serializează requests și adaugă categoria
+        # Pentru requests, determinăm trecut/prezent bazat pe appointment-urile asociate
+        # sau pe created_at dacă nu există appointment-uri
+        past_requests_data = []
+        present_requests_data = []
+        
+        for req in all_requests:
+            req_data = RequestSerializer(req).data
+            category = get_request_category(req)
+            req_data['category'] = category
+            
+            # Determină dacă request-ul este în trecut sau prezent
+            # Verifică dacă există appointment-uri asociate (folosind prefetch)
+            appointments_for_req = req.appointments.all()
+            if appointments_for_req.exists():
+                # Folosește data ultimului appointment pentru a determina trecut/prezent
+                last_appointment = max(appointments_for_req, key=lambda apt: apt.end_at)
+                is_past = last_appointment.end_at < now
+            else:
+                # Dacă nu există appointment-uri, folosește created_at
+                is_past = req.created_at < now
+            
+            if is_past:
+                past_requests_data.append(req_data)
+            else:
+                present_requests_data.append(req_data)
+        
+        # Obține detalii despre echipă
+        team_details = None
+        if instance.team:
+            team = instance.team
+            # Obține toți membrii echipei (excluzând utilizatorul curent)
+            teammates = User.objects.filter(
+                team=team
+            ).exclude(id=instance.id).values(
+                'id', 'username', 'email', 'first_name', 'last_name'
+            )
+            
+            manager_data = None
+            if team.manager:
+                manager_data = {
+                    'id': team.manager.id,
+                    'username': team.manager.username,
+                    'email': team.manager.email,
+                    'first_name': team.manager.first_name,
+                    'last_name': team.manager.last_name,
+                }
+            
+            team_details = {
+                'id': team.id,
+                'name': team.name,
+                'manager': manager_data,
+                'teammates': list(teammates),
+            }
+        
+        # Adaugă datele în răspuns
+        data['appointments'] = {
+            'past': past_appointments_data,
+            'present': present_appointments_data,
+        }
+        data['requests'] = {
+            'past': past_requests_data,
+            'present': present_requests_data,
+        }
+        data['team_details'] = team_details
+        
+        return Response(data)
 
