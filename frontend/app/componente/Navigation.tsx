@@ -2,6 +2,7 @@
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 export default function Navigation() {
   const [isAuthed, setIsAuthed] = useState(false);
@@ -24,12 +25,10 @@ export default function Navigation() {
 
   const handleLogout = () => {
     try {
+      signOut({ callbackUrl: "/" });
       localStorage.removeItem("pu-erh:user");
       setIsAuthed(false);
       setRole(null);
-      if (typeof window !== "undefined") {
-        window.location.href = "/";
-      }
     } catch {}
   };
 
@@ -63,7 +62,10 @@ export default function Navigation() {
                 <div className="py-5 px-0">Login</div>
               </Link>
             ) : (
-              <button onClick={handleLogout} className="py-5 px-0 hover:bg-white/10">
+              <button
+                onClick={handleLogout}
+                className="py-5 px-0 hover:bg-white/10"
+              >
                 Logout
               </button>
             )}

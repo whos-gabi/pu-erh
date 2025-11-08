@@ -1,23 +1,35 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { setMockUser } from "@/lib/mockData";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { signIn, useSession } from "next-auth/react";
 
 export default function LoginPage() {
+  const [username, setUsername] = useState("Alex Pop");
+  const [password, setPassword] = useState("alex.pop@example.com");
   const router = useRouter();
-  const [name, setName] = useState("Alex Pop");
-  const [email, setEmail] = useState("alex.pop@example.com");
+  const { data: session } = useSession();
 
-  const onSubmit = (e: React.FormEvent) => {
+  // Automatically redirect if logged in
+  useEffect(() => {
+    if (session?.user) {
+      console.log(session.user);
+      if (session.user.is_superuser) {
+        router.push("/dashboard");
+      } else {
+        router.push("/account");
+      }
+    }
+  }, [session, router]);
+
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMockUser({
-      id: "u-1",
-      name,
-      email,
-      role: "Member",
+    // Sign in using credentials
+    await signIn("credentials", {
+      redirect: false, // prevent automatic redirect
+      username,
+      password,
     });
-    router.push("/dashboard");
   };
 
   return (
@@ -28,22 +40,22 @@ export default function LoginPage() {
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm">Name</label>
+          <label className="text-sm">Username</label>
           <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2"
-            placeholder="Your name"
+            placeholder="Your username"
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm">Email</label>
+          <label className="text-sm">Password</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2"
-            placeholder="you@example.com"
+            placeholder="Your password"
           />
         </div>
         <Button type="submit" className="w-full">
@@ -53,4 +65,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
