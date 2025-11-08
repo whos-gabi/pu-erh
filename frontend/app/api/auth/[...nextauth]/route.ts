@@ -32,13 +32,10 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.username || !credentials?.password) return null;
 
         try {
-          const res = await axios.post(
-            "http://localhost:8000/api/auth/login/",
-            {
-              username: credentials.username,
-              password: credentials.password,
-            }
-          );
+          const res = await axios.post("/api/auth/login/", {
+            username: credentials.username,
+            password: credentials.password,
+          });
           const tokenData = jwtDecode(res.data.access);
           if (res.data?.access) {
             const user: MyUser = {
