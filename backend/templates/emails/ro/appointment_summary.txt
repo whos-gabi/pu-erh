@@ -1,0 +1,11 @@
+Salut {{ user.first_name }},
+
+Rezumat programare:
+
+• Obiect: {{ item.name }} ({{ item.category }})
+• Data: {{ start_at }} – {{ end_at }}
+• Locație: camera {{ room.code }} – {{ room.name }}
+
+Mulțumim,
+Molson Coors – Smart Appointments
+

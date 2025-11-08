@@ -1,0 +1,11 @@
+Salut {{ user.first_name }},
+
+{{ requester.first_name }} {{ requester.last_name }} ({{ requester.email }}) îți cere să eliberezi biroul rezervat pentru data {{ date }}, deoarece nu mai sunt locuri disponibile și încă nu și-a îndeplinit norma de zile fizice obligatorii.
+
+Poți elibera biroul pentru a ajuta un coleg?
+
+Data: {{ date }}
+
+Mulțumim,
+Molson Coors – Smart Appointments
+
