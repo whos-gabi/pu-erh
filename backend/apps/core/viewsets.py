@@ -922,3 +922,139 @@ class AppAndReqViewSet(viewsets.ViewSet):
             'total': len(appointments_serializer.data) + len(requests_serializer.data)
         })
 
+
+class ItemOccupancyStatsViewSet(viewsets.ViewSet):
+    """
+    ViewSet pentru statisticile de ocupabilitate items.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(
+        summary="Obține statisticile de ocupabilitate pentru un item specific",
+        description="Returnează pentru un item specific o listă cu zilele de luni până vineri, "
+                    "iar pentru fiecare zi o listă cu perechile (hour, popularity).",
+        tags=['Item Occupancy Stats'],
+        parameters=[
+            OpenApiParameter(
+                name='item_id',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='ID-ul item-ului pentru care se caută statisticile'
+            ),
+        ],
+        responses={
+            200: {
+                'description': 'Statistici de ocupabilitate pentru item',
+                'content': {
+                    'application/json': {
+                        'example': {
+                            'item_id': 2,
+                            'item_name': 'scaun1',
+                            'weekdays': [
+                                {
+                                    'weekday': 'Monday',
+                                    'hours': [
+                                        {'hour': 8, 'popularity': 100},
+                                        {'hour': 9, 'popularity': 50}
+                                    ]
+                                },
+                                {
+                                    'weekday': 'Tuesday',
+                                    'hours': []
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Parametrul item_id lipsă sau invalid'},
+            404: {'description': 'Item nu a fost găsit'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='stats')
+    def get_stats(self, request):
+        """
+        Returnează statisticile de ocupabilitate pentru un item specific.
+        Pentru item: zilele de luni-vineri, iar pentru fiecare zi: lista de (hour, popularity).
+        """
+        from django.db import connection
+        from apps.core.models import Item
+        
+        item_id = request.query_params.get('item_id')
+        if not item_id:
+            return Response(
+                {'error': 'Parametrul "item_id" este obligatoriu'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            item_id = int(item_id)
+        except ValueError:
+            return Response(
+                {'error': 'Parametrul "item_id" trebuie să fie un număr întreg'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verifică dacă item-ul există
+        try:
+            item = Item.objects.get(id=item_id, status=Item.ACTIVE)
+        except Item.DoesNotExist:
+            return Response(
+                {'error': f'Item cu ID-ul {item_id} nu a fost găsit sau nu este activ'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Zilele de lucru (luni-vineri)
+        weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+        
+        # Query pentru a obține statisticile pentru item-ul specificat
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    s.weekday,
+                    s.hour,
+                    s.popularity
+                FROM core_item_occupancy_stats s
+                WHERE s.item_id = %s
+                    AND s.weekday IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+                ORDER BY 
+                    CASE s.weekday
+                        WHEN 'Monday' THEN 1
+                        WHEN 'Tuesday' THEN 2
+                        WHEN 'Wednesday' THEN 3
+                        WHEN 'Thursday' THEN 4
+                        WHEN 'Friday' THEN 5
+                    END,
+                    s.hour
+            """, [item_id])
+            
+            rows = cursor.fetchall()
+        
+        # Inițializează toate zilele cu liste goale
+        weekdays_data = []
+        for day in weekdays:
+            weekdays_data.append({
+                'weekday': day,
+                'hours': []
+            })
+        
+        # Adaugă datele pentru fiecare zi
+        for row in rows:
+            weekday, hour, popularity = row
+            
+            # Găsește ziua în listă
+            for day_data in weekdays_data:
+                if day_data['weekday'] == weekday:
+                    day_data['hours'].append({
+                        'hour': hour,
+                        'popularity': popularity
+                    })
+                    break
+        
+        return Response({
+            'item_id': item.id,
+            'item_name': item.name,
+            'weekdays': weekdays_data
+        })
+
