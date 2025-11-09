@@ -42,4 +42,60 @@
   stroke: none !important;
 }
 
+/* Availability status colors (editable via CSS variables) */
+:root {
+  --map-status-free: #22c55e; /* green */
+  --map-status-occupied: #ef4444; /* red */
+  --map-status-teammate: #a855f7; /* purple */
+  --map-status-opacity: 0.35;
+}
+
+/* Free */
+.statusFree path,
+.statusFree rect,
+.statusFree circle,
+.statusFree polygon,
+.statusFree ellipse {
+  fill: var(--map-status-free) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+.statusFree {
+  fill: var(--map-status-free) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+
+/* Occupied */
+.statusOccupied path,
+.statusOccupied rect,
+.statusOccupied circle,
+.statusOccupied polygon,
+.statusOccupied ellipse {
+  fill: var(--map-status-occupied) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+.statusOccupied {
+  fill: var(--map-status-occupied) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+
+/* Occupied by teammate */
+.statusTeammate path,
+.statusTeammate rect,
+.statusTeammate circle,
+.statusTeammate polygon,
+.statusTeammate ellipse {
+  fill: var(--map-status-teammate) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+.statusTeammate {
+  fill: var(--map-status-teammate) !important;
+  fill-opacity: var(--map-status-opacity) !important;
+  stroke: none !important;
+}
+
 
