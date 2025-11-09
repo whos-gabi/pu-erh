@@ -7,9 +7,11 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from datetime import datetime
 
 from .serializers import UserProfileSerializer, UserSerializer, UserCreateSerializer, UserUpdateSerializer
 from .permissions import IsSuperAdmin, IsOwnerOrSuperAdmin
@@ -135,8 +137,8 @@ class UserViewSet(viewsets.ModelViewSet):
     Endpoint: /api/users/
     
     Permisiuni:
-    - List: doar SUPERADMIN
-    - Retrieve: Employee doar propriul profil, SUPERADMIN orice
+    - List: orice utilizator autentificat (pentru funcționalitatea de prieteni)
+    - Retrieve: orice utilizator autentificat (pentru funcționalitatea de prieteni)
     - Create/Update/Delete: doar SUPERADMIN
     """
     queryset = User.objects.all()
@@ -152,114 +154,90 @@ class UserViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         """Returnează permisiunile corespunzătoare acțiunii."""
-        if self.action == 'list':
-            # List: doar SUPERADMIN
-            return [IsSuperAdmin()]
-        elif self.action == 'retrieve':
-            # Retrieve: Employee doar propriul profil, SUPERADMIN orice
-            return [IsOwnerOrSuperAdmin()]
+        if self.action in ['list', 'retrieve']:
+            # List și Retrieve: orice utilizator autentificat
+            return [IsAuthenticated()]
         elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             # Create/Update/Delete: doar SUPERADMIN
             return [IsSuperAdmin()]
         return super().get_permissions()
     
     def get_queryset(self):
-        """Filtrează queryset-ul în funcție de permisiuni."""
-        user = self.request.user
-        
-        # SUPERADMIN vede tot
-        if user.is_superuser:
-            return User.objects.all()
-        
-        # Employee vede doar propriul profil
-        return User.objects.filter(id=user.id)
+        """Returnează toți utilizatorii pentru orice user autentificat."""
+        # Orice user autentificat poate vedea toți utilizatorii
+        return User.objects.all()
     
     def retrieve(self, request, *args, **kwargs):
         """
         Returnează detalii despre utilizator, inclusiv:
-        - Appointments și requests împărțite în trecut/prezent
-        - Categoria item-ului pentru fiecare appointment și request
+        - Appointments și requests împărțite în trecut/azi/viitor
+        - Pentru fiecare appointment: numele item-ului
+        - Pentru fiecare request: numele room-ului
+        - Include toate cererile indiferent de status
         - Detalii despre echipă (echipa, coechipieri, manager)
         """
+        from apps.core.api import AppointmentSerializer, RequestSerializer
+        
         instance = self.get_object()
         serializer = self.get_serializer(instance)
         data = serializer.data
         
         # Obține toate appointment-urile și request-urile utilizatorului
         now = timezone.now()
+        today = now.date()
         
-        # Appointments
+        # Appointments - include toate
         all_appointments = Appointment.objects.filter(
             user=instance
-        ).select_related('item', 'item__category', 'request', 'user')
+        ).select_related('item', 'user')
         
-        # Requests
+        # Requests - include toate indiferent de status
         all_requests = Request.objects.filter(
             user=instance
-        ).select_related('room', 'decided_by').prefetch_related('appointments', 'appointments__item', 'appointments__item__category')
+        ).select_related('room', 'room__category', 'decided_by')
         
-        # Împarte appointments în trecut și prezent
-        past_appointments = all_appointments.filter(end_at__lt=now)
-        present_appointments = all_appointments.filter(end_at__gte=now)
+        # Organizează appointments în trecut/azi/viitor
+        today = now.date()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        past_appointments = all_appointments.filter(end_date__lt=today_start)
+        today_appointments = all_appointments.filter(
+            start_date__date=today
+        )
+        future_appointments = all_appointments.filter(start_date__gt=today_end)
         
-        # Serializează appointments
-        past_appointments_data = AppointmentSerializer(past_appointments, many=True).data
-        present_appointments_data = AppointmentSerializer(present_appointments, many=True).data
+        # Serializează appointments și adaugă numele item-ului
+        def format_appointment(apt):
+            apt_data = AppointmentSerializer(apt).data
+            apt_data['resource_name'] = apt.item.name if apt.item else None
+            apt_data['resource_type'] = 'item'
+            return apt_data
         
-        # Pentru requests, trebuie să determinăm categoria
-        # O request este pentru o cameră, dar categoria vine de la item-urile din cameră
-        # sau de la appointment-urile asociate cu request-ul
-        def get_request_category(request_obj):
-            """Obține categoria pentru un request."""
-            # Încearcă să obțină categoria din appointment-urile asociate (folosind prefetch)
-            appointments_for_request = request_obj.appointments.all()
-            if appointments_for_request.exists():
-                first_appointment = appointments_for_request[0]
-                if first_appointment.item and first_appointment.item.category:
-                    return {
-                        'id': first_appointment.item.category.id,
-                        'name': first_appointment.item.category.name,
-                        'slug': first_appointment.item.category.slug
-                    }
-            
-            # Dacă nu există appointment-uri, încearcă să obțină categoria din primul item al camerei
-            if request_obj.room:
-                first_item = request_obj.room.items.select_related('category').first()
-                if first_item and first_item.category:
-                    return {
-                        'id': first_item.category.id,
-                        'name': first_item.category.name,
-                        'slug': first_item.category.slug
-                    }
-            
-            return None
+        past_appointments_data = [format_appointment(apt) for apt in past_appointments]
+        today_appointments_data = [format_appointment(apt) for apt in today_appointments]
+        future_appointments_data = [format_appointment(apt) for apt in future_appointments]
         
-        # Serializează requests și adaugă categoria
-        # Pentru requests, determinăm trecut/prezent bazat pe appointment-urile asociate
-        # sau pe created_at dacă nu există appointment-uri
-        past_requests_data = []
-        present_requests_data = []
+        # Organizează requests în trecut/azi/viitor (bazat pe start_date)
+        today = now.date()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        past_requests = all_requests.filter(end_date__lt=today_start)
+        today_requests = all_requests.filter(
+            start_date__date__lte=today,
+            end_date__date__gte=today
+        )
+        future_requests = all_requests.filter(start_date__gt=today_end)
         
-        for req in all_requests:
+        # Serializează requests și adaugă numele room-ului
+        def format_request(req):
             req_data = RequestSerializer(req).data
-            category = get_request_category(req)
-            req_data['category'] = category
-            
-            # Determină dacă request-ul este în trecut sau prezent
-            # Verifică dacă există appointment-uri asociate (folosind prefetch)
-            appointments_for_req = req.appointments.all()
-            if appointments_for_req.exists():
-                # Folosește data ultimului appointment pentru a determina trecut/prezent
-                last_appointment = max(appointments_for_req, key=lambda apt: apt.end_at)
-                is_past = last_appointment.end_at < now
-            else:
-                # Dacă nu există appointment-uri, folosește created_at
-                is_past = req.created_at < now
-            
-            if is_past:
-                past_requests_data.append(req_data)
-            else:
-                present_requests_data.append(req_data)
+            req_data['resource_name'] = req.room.name if req.room else None
+            req_data['resource_type'] = 'room'
+            return req_data
+        
+        past_requests_data = [format_request(req) for req in past_requests]
+        today_requests_data = [format_request(req) for req in today_requests]
+        future_requests_data = [format_request(req) for req in future_requests]
         
         # Obține detalii despre echipă
         team_details = None
@@ -289,16 +267,102 @@ class UserViewSet(viewsets.ModelViewSet):
                 'teammates': list(teammates),
             }
         
-        # Adaugă datele în răspuns
+        # Adaugă datele în răspuns organizate în trecut/azi/viitor
         data['appointments'] = {
             'past': past_appointments_data,
-            'present': present_appointments_data,
+            'today': today_appointments_data,
+            'future': future_appointments_data,
         }
         data['requests'] = {
             'past': past_requests_data,
-            'present': present_requests_data,
+            'today': today_requests_data,
+            'future': future_requests_data,
         }
         data['team_details'] = team_details
         
         return Response(data)
+    
+    @extend_schema(
+        summary="Obține appointments și requests pentru un user în funcție de dată",
+        description="Returnează toate appointment-urile și request-urile unui utilizator pentru o dată specificată.",
+        tags=['Users'],
+        parameters=[
+            OpenApiParameter(
+                name='date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Data pentru care se caută appointments/requests (format: YYYY-MM-DD)'
+            ),
+        ],
+        responses={
+            200: {'description': 'Listă de appointments și requests'},
+            400: {'description': 'Parametrul date lipsă sau format invalid'},
+            404: {'description': 'User nu a fost găsit'}
+        }
+    )
+    @action(detail=True, methods=['get'], url_path='by-date')
+    def by_date(self, request, pk=None):
+        """
+        Returnează toate appointment-urile și request-urile unui utilizator pentru o dată specificată.
+        """
+        from apps.core.api import AppointmentSerializer, RequestSerializer
+        
+        instance = self.get_object()
+        date_str = request.query_params.get('date')
+        
+        if not date_str:
+            return Response(
+                {'error': 'Parametrul "date" este obligatoriu (format: YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Format invalid pentru date. Folosește YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Filtrează appointments din ziua specificată
+        appointments = Appointment.objects.filter(
+            user=instance,
+            start_date__date=target_date
+        ).select_related('item', 'user')
+        
+        # Filtrează requests din ziua specificată (toate statusurile)
+        # Un request este relevant dacă start_date sau end_date se suprapun cu ziua target
+        requests = Request.objects.filter(
+            user=instance
+        ).filter(
+            start_date__date__lte=target_date,
+            end_date__date__gte=target_date
+        ).select_related('room', 'room__category', 'decided_by')
+        
+        # Serializează și adaugă numele resursei pentru fiecare
+        appointments_data = []
+        for apt in appointments:
+            apt_data = AppointmentSerializer(apt).data
+            apt_data['resource_name'] = apt.item.name if apt.item else None
+            apt_data['resource_type'] = 'item'
+            appointments_data.append(apt_data)
+        
+        requests_data = []
+        for req in requests:
+            req_data = RequestSerializer(req).data
+            req_data['resource_name'] = req.room.name if req.room else None
+            req_data['resource_type'] = 'room'
+            requests_data.append(req_data)
+        
+        return Response({
+            'user_id': instance.id,
+            'username': instance.username,
+            'date': target_date.isoformat(),
+            'appointments': appointments_data,
+            'requests': requests_data,
+            'total_appointments': len(appointments_data),
+            'total_requests': len(requests_data),
+            'total': len(appointments_data) + len(requests_data)
+        })
 
