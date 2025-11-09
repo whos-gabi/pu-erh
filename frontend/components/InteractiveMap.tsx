@@ -3,12 +3,15 @@ import React, { useEffect, useRef, useState } from "react";
 import styles from "@/styles/InteractiveMap.module.css";
 import { Button } from "@/components/ui/button";
 
+type AvailabilityStatus = "free" | "occupied" | "teammate";
+
 type InteractiveMapProps = {
   onSelect?: (id: string | null) => void;
   activeDate?: string | null;
+  statusMap?: Record<string, AvailabilityStatus>;
 };
 
-export default function InteractiveMap({ onSelect, activeDate }: InteractiveMapProps) {
+export default function InteractiveMap({ onSelect, activeDate, statusMap }: InteractiveMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -72,6 +75,51 @@ export default function InteractiveMap({ onSelect, activeDate }: InteractiveMapP
       console.log("Map updating for date:", activeDate);
     }
   }, [activeDate, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !containerRef.current) return;
+    const svgRoot = containerRef.current.querySelector(
+      "#floor-plan-svg-root"
+    ) as SVGElement | null;
+    if (!svgRoot) return;
+
+    // Apply availability colors based on statusMap
+    // clear previous status classes
+    svgRoot
+      .querySelectorAll(`.${styles.statusFree}, .${styles.statusOccupied}, .${styles.statusTeammate}`)
+      .forEach((el) => {
+        el.classList.remove(styles.statusFree, styles.statusOccupied, styles.statusTeammate);
+      });
+    if (!statusMap) return;
+
+    const applyStatusToId = (code: string, status: AvailabilityStatus) => {
+      const cls =
+        status === "free"
+          ? styles.statusFree
+          : status === "teammate"
+          ? styles.statusTeammate
+          : styles.statusOccupied;
+      // Try exact id group first
+      const targets: Element[] = [];
+      const direct = svgRoot.querySelector(`#${CSS.escape(code)}`);
+      if (direct) targets.push(direct);
+      // Try area variant (for rooms like meetingRoomN -> meetingRoomAreaN)
+      const area = svgRoot.querySelector(`#${CSS.escape(code)}Area`);
+      if (area) targets.push(area);
+      // Avoid broad prefix matches that could bleed into similar ids (e.g., meetingRoom1 -> meetingRoom10)
+      const exactGroup = svgRoot.querySelector(`g#${CSS.escape(code)}`);
+      if (exactGroup) targets.push(exactGroup);
+      // De-duplicate
+      const unique = Array.from(new Set(targets));
+      unique.forEach((el) => (el as HTMLElement).classList.add(cls));
+    };
+
+    Object.entries(statusMap).forEach(([code, status]) => {
+      applyStatusToId(code, status);
+    });
+    // Note: selection styling (.selected) uses stronger specificity and !important,
+    // so it will visually override these status classes when an item is clicked.
+  }, [statusMap, loaded]);
 
   useEffect(() => {
     if (!loaded || !containerRef.current) return;

@@ -1,26 +1,9 @@
 "use client";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
-import { ensureSeedReservations, getMockUser, setMockUser, type PuErhUser } from "@/lib/mockData";
+ 
 
 export default function Home() {
-  const [user, setUser] = useState<PuErhUser | null>(null);
-  useEffect(() => {
-    // Seed data on first visit for demo
-    let u = getMockUser();
-    if (!u) {
-      u = {
-        id: "u-1",
-        name: "Alex Pop",
-        email: "alex.pop@example.com",
-        role: "Member",
-      };
-      setMockUser(u);
-    }
-    ensureSeedReservations();
-    setUser(u);
-  }, []);
 
   return (
     <div className="mx-auto max-w-6xl">
