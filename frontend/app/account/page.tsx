@@ -13,7 +13,9 @@ export default function AccountPage() {
     didFetchRef.current = true; // prevent double-run in React StrictMode (dev)
     const userId = localStorage.getItem("pu-erh:user_id");
     const tokensRaw = localStorage.getItem("pu-erh:tokens");
-    const access = tokensRaw ? (JSON.parse(tokensRaw).access as string | undefined) : undefined;
+    const access = tokensRaw
+      ? (JSON.parse(tokensRaw).access as string | undefined)
+      : undefined;
     // Fetch user profile
     if (access && userId) {
       fetch(`/api/users/${userId}/`, {
@@ -60,7 +62,8 @@ export default function AccountPage() {
                   const fn = (profile?.first_name ?? "").toString();
                   const ln = (profile?.last_name ?? "").toString();
                   const initial =
-                    (fn?.[0]?.toUpperCase?.() ?? "") + (ln?.[0]?.toUpperCase?.() ?? "");
+                    (fn?.[0]?.toUpperCase?.() ?? "") +
+                    (ln?.[0]?.toUpperCase?.() ?? "");
                   if (initial.trim()) return initial;
                   const uname = (profile?.username ?? "").toString();
                   return uname ? uname.slice(0, 2).toUpperCase() : "US";
@@ -69,7 +72,11 @@ export default function AccountPage() {
             </Avatar>
             <div>
               <div className="text-2xl font-semibold">
-                {profile ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || profile.username : "—"}
+                {profile
+                  ? `${profile.first_name ?? ""} ${
+                      profile.last_name ?? ""
+                    }`.trim() || profile.username
+                  : "—"}
               </div>
               <div className="text-xs text-white/60">
                 @{profile?.username ?? "—"} • {profile?.email ?? "—"}
@@ -91,23 +98,26 @@ export default function AccountPage() {
               Staff: {profile?.is_staff ? "Yes" : "No"}
             </span>
             <span className="rounded-full bg-white/10 px-3 py-1">
-              Joined: {profile?.date_joined ? new Date(profile.date_joined).toLocaleDateString() : "—"}
+              Joined:{" "}
+              {profile?.date_joined
+                ? new Date(profile.date_joined).toLocaleDateString()
+                : "—"}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-8 grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2">
+      <div className="mt-8 grid gap-6 md:grid-cols-2">
+        <div className="md:col-span-2 w-full">
           {(() => {
             const fmt = (iso?: string) =>
               iso ? new Date(iso).toLocaleString() : "—";
             const toRows = (when: "today" | "future" | "past") => {
               const appts: Array<{
-                id: string
-                start_date?: string
-                resource_name?: string
-                status?: string
+                id: string;
+                start_date?: string;
+                resource_name?: string;
+                status?: string;
               }> = Array.isArray(profile?.appointments?.[when])
                 ? profile.appointments[when].map((a: any) => ({
                     id: `appt-${String(a.id)}`,
@@ -117,10 +127,10 @@ export default function AccountPage() {
                   }))
                 : [];
               const reqs: Array<{
-                id: string
-                start_date?: string
-                resource_name?: string
-                status?: string
+                id: string;
+                start_date?: string;
+                resource_name?: string;
+                status?: string;
               }> = Array.isArray(profile?.requests?.[when])
                 ? profile.requests[when].map((r: any) => ({
                     id: `req-${String(r.id)}`,
@@ -144,17 +154,27 @@ export default function AccountPage() {
               rows,
               emptyText,
             }: {
-              title: string
-              rows: Array<{ id: string; start_date?: string; resource_name?: string; status?: string }>
-              emptyText: string
+              title: string;
+              rows: Array<{
+                id: string;
+                start_date?: string;
+                resource_name?: string;
+                status?: string;
+              }>;
+              emptyText: string;
             }) => (
               <section className="mt-0 first:mt-0">
                 <h2 className="text-lg font-semibold">{title}</h2>
                 <div className="mt-3 divide-y rounded-xl border">
                   {rows.map((row) => (
-                    <div key={`${title}-${row.id}-${row.start_date ?? ""}`} className="flex items-center justify-between p-4">
+                    <div
+                      key={`${title}-${row.id}-${row.start_date ?? ""}`}
+                      className="flex items-center justify-between p-4"
+                    >
                       <div className="text-sm">
-                        <div className="font-medium">{row.resource_name ?? "—"}</div>
+                        <div className="font-medium">
+                          {row.resource_name ?? "—"}
+                        </div>
                         <div className="text-muted-foreground">
                           {fmt(row.start_date)}
                         </div>
@@ -165,7 +185,9 @@ export default function AccountPage() {
                     </div>
                   ))}
                   {rows.length === 0 ? (
-                    <div className="p-6 text-sm text-muted-foreground">{emptyText}</div>
+                    <div className="p-6 text-sm text-muted-foreground">
+                      {emptyText}
+                    </div>
                   ) : null}
                 </div>
               </section>
@@ -173,11 +195,23 @@ export default function AccountPage() {
 
             return (
               <>
-                <Section title="Today" rows={todayRows} emptyText="No items for today." />
+                <Section
+                  title="Today"
+                  rows={todayRows}
+                  emptyText="No items for today."
+                />
                 <div className="h-6" />
-                <Section title="Future" rows={futureRows} emptyText="No upcoming items." />
+                <Section
+                  title="Future"
+                  rows={futureRows}
+                  emptyText="No upcoming items."
+                />
                 <div className="h-6" />
-                <Section title="Past" rows={pastRows} emptyText="No past items." />
+                <Section
+                  title="Past"
+                  rows={pastRows}
+                  emptyText="No past items."
+                />
               </>
             );
           })()}
@@ -186,4 +220,3 @@ export default function AccountPage() {
     </div>
   );
 }
-
