@@ -146,6 +146,113 @@ class RequestViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(request_obj)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @extend_schema(
+        tags=['Requests'],
+        summary='Obține request-urile pentru o cameră și o dată',
+        description='Returnează toate request-urile care au fost făcute pentru o cameră specificată (după roomCode) '
+                    'și pentru o dată specificată (după start_date).',
+        parameters=[
+            OpenApiParameter(
+                name='roomCode',
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Codul camerei (ex: meetingRoom1, beerPointArea)'
+            ),
+            OpenApiParameter(
+                name='date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Data pentru care se caută request-urile (format: YYYY-MM-DD). Ex: 2024-01-15'
+            ),
+        ],
+        responses={
+            200: {
+                'description': 'Lista request-urilor pentru camera și data specificată',
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'object',
+                            'properties': {
+                                'roomCode': {'type': 'string'},
+                                'date': {'type': 'string', 'format': 'date'},
+                                'requests': {
+                                    'type': 'array',
+                                    'items': {'type': 'object'}
+                                },
+                                'total': {'type': 'integer'}
+                            }
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Parametri lipsă sau invalizi'},
+            404: {'description': 'Camera nu a fost găsită'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='by-room-and-date')
+    def by_room_and_date(self, request):
+        """
+        Returnează toate request-urile care au fost făcute pentru o cameră specificată (după roomCode)
+        și pentru o dată specificată (după start_date).
+        """
+        from apps.core.models import Room
+        
+        room_code = request.query_params.get('roomCode')
+        date_str = request.query_params.get('date')
+        
+        if not room_code:
+            return Response(
+                {'error': 'Parametrul "roomCode" este obligatoriu'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not date_str:
+            return Response(
+                {'error': 'Parametrul "date" este obligatoriu (format: YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verifică dacă camera există
+        try:
+            room = Room.objects.get(code=room_code)
+        except Room.DoesNotExist:
+            return Response(
+                {'error': f'Camera cu codul "{room_code}" nu a fost găsită'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Parsează data
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Format invalid pentru date. Folosește YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Filtrează request-urile după room și start_date
+        requests = Request.objects.filter(
+            room=room,
+            start_date__date=target_date
+        ).select_related('user', 'room', 'room__category', 'decided_by')
+        
+        # Aplică permisiunile: Employee vede doar propriile, SUPERADMIN vede toate
+        user = request.user
+        if not user.is_superuser:
+            requests = requests.filter(user=user)
+        
+        serializer = self.get_serializer(requests, many=True)
+        
+        return Response({
+            'roomCode': room_code,
+            'roomName': room.name,
+            'date': target_date.isoformat(),
+            'requests': serializer.data,
+            'total': len(serializer.data)
+        })
 
 
 @extend_schema_view(
@@ -628,5 +735,109 @@ class AvailabilityViewSet(viewsets.ViewSet):
             'total_occupied_items': len(occupied_items),
             'total_free_rooms': len(free_rooms),
             'total_occupied_rooms': len(occupied_rooms),
+        })
+
+
+class AppAndReqViewSet(viewsets.ViewSet):
+    """
+    ViewSet pentru combinarea appointments și requests într-un singur endpoint.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(
+        summary="Obține appointments și approved requests pentru o dată",
+        description="Returnează toate appointment-urile și request-urile approved din ziua specificată. "
+                    "Include și toate cererile care au fost approved pentru ziua respectivă.",
+        tags=['Appointments & Requests'],
+        parameters=[
+            OpenApiParameter(
+                name='date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Data pentru care se caută appointments și requests (format: YYYY-MM-DD). Ex: 2024-01-15'
+            ),
+        ],
+        responses={
+            200: {
+                'description': 'Lista appointments și approved requests din ziua specificată',
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'object',
+                            'properties': {
+                                'date': {'type': 'string', 'format': 'date'},
+                                'appointments': {
+                                    'type': 'array',
+                                    'items': {'type': 'object'}
+                                },
+                                'approved_requests': {
+                                    'type': 'array',
+                                    'items': {'type': 'object'}
+                                },
+                                'total_appointments': {'type': 'integer'},
+                                'total_approved_requests': {'type': 'integer'},
+                                'total': {'type': 'integer'}
+                            }
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Parametrul date lipsă sau format invalid'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='by-date')
+    def by_date(self, request):
+        """
+        Returnează toate appointment-urile și request-urile approved din ziua specificată.
+        Include și toate cererile care au fost approved pentru ziua respectivă.
+        """
+        from apps.core.api import RequestSerializer
+        
+        date_str = request.query_params.get('date')
+        if not date_str:
+            return Response(
+                {'error': 'Parametrul "date" este obligatoriu (format: YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Format invalid pentru date. Folosește YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Filtrează appointment-urile din ziua specificată
+        appointments = Appointment.objects.filter(
+            start_date__date=target_date
+        ).select_related('user', 'item')
+        
+        # Filtrează request-urile approved din ziua specificată
+        # Un request este relevant dacă start_date sau end_date se suprapun cu ziua target
+        approved_requests = Request.objects.filter(
+            status=Request.APPROVED
+        ).filter(
+            start_date__date__lte=target_date,
+            end_date__date__gte=target_date
+        ).select_related('user', 'room', 'room__category', 'decided_by')
+        
+        # Aplică permisiunile: Employee vede doar propriile, SUPERADMIN vede toate
+        user = request.user
+        if not user.is_superuser:
+            appointments = appointments.filter(user=user)
+            approved_requests = approved_requests.filter(user=user)
+        
+        appointments_serializer = AppointmentSerializer(appointments, many=True)
+        requests_serializer = RequestSerializer(approved_requests, many=True)
+        
+        return Response({
+            'date': target_date.isoformat(),
+            'appointments': appointments_serializer.data,
+            'approved_requests': requests_serializer.data,
+            'total_appointments': len(appointments_serializer.data),
+            'total_approved_requests': len(requests_serializer.data),
+            'total': len(appointments_serializer.data) + len(requests_serializer.data)
         })
 
