@@ -524,6 +524,7 @@ export default function ReservePage() {
         <MapComponent
           activeDate={activeDate}
           statusMap={statusMap}
+          isDesktop={isDesktop}
           onSelect={(id) => setSelected(id ? { id, label: id } : null)}
         />
       </div>

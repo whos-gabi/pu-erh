@@ -9,9 +9,10 @@ type InteractiveMapProps = {
   onSelect?: (id: string | null) => void;
   activeDate?: string | null;
   statusMap?: Record<string, AvailabilityStatus>;
+  isDesktop?: boolean;
 };
 
-export default function InteractiveMap({ onSelect, activeDate, statusMap }: InteractiveMapProps) {
+export default function InteractiveMap({ onSelect, activeDate, statusMap, isDesktop }: InteractiveMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -427,7 +428,13 @@ export default function InteractiveMap({ onSelect, activeDate, statusMap }: Inte
       const delta = -e.deltaY;
       const newScale = Math.min(4, Math.max(0.3, scale * (1 + delta * zoomIntensity)));
 
-      // Zoom towards cursor position
+      if (isDesktop) {
+        // When rotated 90deg, keep zoom centered relative to current translate to avoid axis confusion
+        setScale(newScale);
+        setTranslate({ x: translate.x, y: translate.y });
+        return;
+      }
+      // Zoom towards cursor position (unrotated)
       const rect = viewport.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
@@ -448,10 +455,19 @@ export default function InteractiveMap({ onSelect, activeDate, statusMap }: Inte
       if (!isPanningRef.current) return;
       const dx = e.clientX - panStartRef.current.x;
       const dy = e.clientY - panStartRef.current.y;
-      setTranslate({
-        x: translateStartRef.current.x + dx,
-        y: translateStartRef.current.y + dy,
-      });
+      if (isDesktop) {
+        // Compensate for 90deg rotation: screen delta (dx,dy) maps to child delta (tx,ty) with
+        // R(90)*(tx,ty) = (dx,dy) => (-ty, tx) = (dx,dy) => tx=dy, ty=-dx
+        setTranslate({
+          x: translateStartRef.current.x + dy,
+          y: translateStartRef.current.y - dx,
+        });
+      } else {
+        setTranslate({
+          x: translateStartRef.current.x + dx,
+          y: translateStartRef.current.y + dy,
+        });
+      }
     };
     const onPointerUp = (e: PointerEvent) => {
       isPanningRef.current = false;
@@ -472,8 +488,18 @@ export default function InteractiveMap({ onSelect, activeDate, statusMap }: Inte
   const zoomIn = () => setScale((s) => Math.min(4, s * 1.2));
   const zoomOut = () => setScale((s) => Math.max(0.3, s / 1.2));
   const resetView = () => {
+    const viewport = viewportRef.current;
     setScale(1);
-    setTranslate({ x: 0, y: 0 });
+    if (isDesktop && viewport) {
+      // Center the origin for rotated view so the canvas recenters instead of a corner
+      const vw = viewport.clientWidth;
+      const vh = viewport.clientHeight;
+      // For 90deg rotation, screen center (vw/2, vh/2) corresponds to translate (tx,ty) with (-ty, tx) = (vw/2, vh/2)
+      // => tx = vh/2, ty = -vw/2
+      setTranslate({ x: vh / 2, y: -vw / 2 });
+    } else {
+      setTranslate({ x: 0, y: 0 });
+    }
   };
 
   return (
@@ -493,13 +519,26 @@ export default function InteractiveMap({ onSelect, activeDate, statusMap }: Inte
         }}
       >
         <div
-          ref={containerRef}
-          className="will-change-transform select-none"
-          style={{
-            transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
-            transformOrigin: "0 0",
-          }}
-        />
+          style={
+            isDesktop
+              ? {
+                  width: "100%",
+                  height: "100%",
+                  transform: "rotate(90deg)",
+                  transformOrigin: "50% 50%",
+                }
+              : undefined
+          }
+        >
+          <div
+            ref={containerRef}
+            className="will-change-transform select-none"
+            style={{
+              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+              transformOrigin: "0 0",
+            }}
+          />
+        </div>
         <div className="absolute right-3 top-3 flex flex-col gap-2">
           <Button size="icon" variant="secondary" onClick={zoomIn}>
             +
