@@ -4,7 +4,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import { jwtDecode } from "jwt-decode";
 import axiosInstance from "@/app/componente/axiosInstance";
-import { API_BASE_URL } from "@/lib/api";
 
 // Define our user type
 export interface MyUser extends User {
