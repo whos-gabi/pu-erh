@@ -1009,48 +1009,65 @@ class ItemOccupancyStatsViewSet(viewsets.ViewSet):
         weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         
         # Query pentru a obține statisticile pentru item-ul specificat
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT 
-                    s.weekday,
-                    s.hour,
-                    s.popularity
-                FROM core_item_occupancy_stats s
-                WHERE s.item_id = %s
-                    AND s.weekday IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
-                ORDER BY 
-                    CASE s.weekday
-                        WHEN 'Monday' THEN 1
-                        WHEN 'Tuesday' THEN 2
-                        WHEN 'Wednesday' THEN 3
-                        WHEN 'Thursday' THEN 4
-                        WHEN 'Friday' THEN 5
-                    END,
-                    s.hour
-            """, [item_id])
-            
-            rows = cursor.fetchall()
+        rows = []
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 
+                        s.weekday,
+                        s.hour,
+                        s.popularity
+                    FROM core_item_occupancy_stats s
+                    WHERE s.item_id = %s
+                        AND s.weekday IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+                    ORDER BY 
+                        CASE s.weekday
+                            WHEN 'Monday' THEN 1
+                            WHEN 'Tuesday' THEN 2
+                            WHEN 'Wednesday' THEN 3
+                            WHEN 'Thursday' THEN 4
+                            WHEN 'Friday' THEN 5
+                        END,
+                        s.hour
+                """, [item_id])
+                
+                rows = cursor.fetchall()
+        except Exception as e:
+            # Dacă tabelul nu există sau apare o altă eroare, returnăm date goale
+            # (toate orele cu popularity 0)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Eroare la interogarea core_item_occupancy_stats: {e}")
+            rows = []
         
-        # Inițializează toate zilele cu liste goale
-        weekdays_data = []
-        for day in weekdays:
-            weekdays_data.append({
-                'weekday': day,
-                'hours': []
-            })
-        
-        # Adaugă datele pentru fiecare zi
+        # Creează un dict pentru a stoca datele din baza de date
+        stats_dict = {}
         for row in rows:
             weekday, hour, popularity = row
+            if weekday not in stats_dict:
+                stats_dict[weekday] = {}
+            # Convertim hour și popularity la int pentru a evita probleme cu Decimal
+            hour_int = int(hour) if hour is not None else 0
+            popularity_int = int(popularity) if popularity is not None else 0
+            stats_dict[weekday][hour_int] = popularity_int
+        
+        # Inițializează toate zilele cu toate orele de la 0 la 23
+        weekdays_data = []
+        for day in weekdays:
+            hours_list = []
+            # Pentru fiecare oră de la 0 la 23
+            for hour in range(24):
+                # Dacă există date în baza de date, folosește-le, altfel popularity = 0
+                popularity = stats_dict.get(day, {}).get(hour, 0)
+                hours_list.append({
+                    'hour': hour,
+                    'popularity': popularity
+                })
             
-            # Găsește ziua în listă
-            for day_data in weekdays_data:
-                if day_data['weekday'] == weekday:
-                    day_data['hours'].append({
-                        'hour': hour,
-                        'popularity': popularity
-                    })
-                    break
+            weekdays_data.append({
+                'weekday': day,
+                'hours': hours_list
+            })
         
         return Response({
             'item_id': item.id,
