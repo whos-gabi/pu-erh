@@ -3,12 +3,10 @@ Django models for Office Smart Appointments Management System.
 """
 from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.constraints import ExclusionConstraint
-from django.contrib.postgres.fields import ArrayField, DateTimeRangeField
-from django.contrib.postgres.indexes import GistIndex
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import CheckConstraint, Q, F
-from psycopg2.extras import DateTimeTZRange
 
 
 class Role(models.Model):
@@ -162,7 +160,6 @@ class Room(models.Model):
         related_name='rooms',
     )
     capacity = models.IntegerField(null=True, blank=True)
-    features = models.JSONField(default=dict, blank=True)  # e.g., {"projector": True}
 
     class Meta:
         db_table = 'core_room'
@@ -173,23 +170,8 @@ class Room(models.Model):
         return f"{self.code} - {self.name}"
 
 
-class ItemCategory(models.Model):
-    """Category for inventory items."""
-    name = models.CharField(max_length=64, unique=True)
-    slug = models.SlugField(max_length=64, unique=True)
-    description = models.TextField(blank=True, default='')
-
-    class Meta:
-        db_table = 'core_item_category'
-        verbose_name = 'Item Category'
-        verbose_name_plural = 'Item Categories'
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class Item(models.Model):
-    """Inventory item in a room. Appointments are made on items."""
+    """Inventory item. Appointments are made on items."""
     ACTIVE = 'ACTIVE'
     BROKEN = 'BROKEN'
     LOST = 'LOST'
@@ -199,18 +181,6 @@ class Item(models.Model):
         (LOST, 'Lost'),
     ]
 
-    room = models.ForeignKey(
-        Room,
-        on_delete=models.PROTECT,
-        related_name='items',
-        null=True,
-        blank=True,
-    )
-    category = models.ForeignKey(
-        ItemCategory,
-        on_delete=models.PROTECT,
-        related_name='items',
-    )
     name = models.CharField(max_length=128)
     status = models.CharField(
         max_length=16,
@@ -224,12 +194,10 @@ class Item(models.Model):
         verbose_name = 'Item'
         verbose_name_plural = 'Items'
         indexes = [
-            models.Index(fields=['room', 'status']),
+            models.Index(fields=['status']),
         ]
 
     def __str__(self) -> str:
-        if self.room:
-            return f"{self.name} ({self.room.code})"
         return f"{self.name}"
 
 
@@ -259,8 +227,8 @@ class Request(models.Model):
         choices=STATUS_CHOICES,
         default=WAITING,
     )
-    date_start = models.DateTimeField()
-    date_end = models.DateTimeField()
+    start_date = models.DateTimeField(help_text="Data și ora de început")
+    end_date = models.DateTimeField(help_text="Data și ora de sfârșit")
     created_at = models.DateTimeField(auto_now_add=True)
     status_changed_at = models.DateTimeField(auto_now=True)
     decided_by = models.ForeignKey(
@@ -281,17 +249,17 @@ class Request(models.Model):
         ]
         constraints = [
             CheckConstraint(
-                check=Q(date_end__gt=F('date_start')),
-                name='request_date_end_after_date_start',
+                check=Q(end_date__gt=F('start_date')),
+                name='request_end_date_after_start_date',
             ),
         ]
 
     def clean(self) -> None:
         """Validate request data."""
-        # Validate that end_at is after start_at
-        if self.date_end <= self.date_start:
+        # Validate that end_date is after start_date
+        if self.end_date <= self.start_date:
             raise ValidationError(
-                {'date_end': 'date_end must be after date_start.'}
+                {'end_date': 'end_date must be after start_date.'}
             )
         
         # Validate that only SUPERADMIN (is_superuser=True) can approve/dismiss requests
@@ -326,61 +294,38 @@ class Appointment(models.Model):
         on_delete=models.PROTECT,
         related_name='appointments',
     )
-    start_at = models.DateTimeField()
-    end_at = models.DateTimeField()
-    time_range = DateTimeRangeField(null=True, blank=True, editable=False)
+    start_date = models.DateTimeField(help_text="Data și ora de început")
+    end_date = models.DateTimeField(help_text="Data și ora de sfârșit")
     created_at = models.DateTimeField(auto_now_add=True)
-    request = models.ForeignKey(
-        Request,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='appointments',
-    )
 
     class Meta:
         db_table = 'core_appointment'
         verbose_name = 'Appointment'
         verbose_name_plural = 'Appointments'
         indexes = [
-            models.Index(fields=['item', 'start_at']),
-            GistIndex(fields=['time_range']),
+            models.Index(fields=['item', 'start_date']),
         ]
         constraints = [
             CheckConstraint(
-                check=Q(end_at__gt=F('start_at')),
-                name='appointment_end_after_start',
-            ),
-            ExclusionConstraint(
-                name='exclude_overlap_per_item',
-                expressions=[
-                    ('item', '='),
-                    ('time_range', '&&'),
-                ],
+                check=Q(end_date__gt=F('start_date')),
+                name='appointment_end_date_after_start_date',
             ),
         ]
 
     def clean(self) -> None:
-        """Validate that end_at is after start_at."""
-        if self.end_at <= self.start_at:
+        """Validate that end_date is after start_date."""
+        if self.end_date <= self.start_date:
             raise ValidationError(
-                {'end_at': 'end_at must be after start_at.'}
+                {'end_date': 'end_date must be after start_date.'}
             )
 
     def save(self, *args, **kwargs) -> None:
-        """Save appointment and sync time_range with start_at/end_at (inclusive bounds)."""
-        # Sync time_range: [start_at, end_at] with inclusive bounds
-        if self.start_at and self.end_at:
-            self.time_range = DateTimeTZRange(
-                lower=self.start_at,
-                upper=self.end_at,
-                bounds='[]',  # Inclusive bounds
-            )
+        """Save appointment."""
         self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        return f"Appointment {self.id} - {self.item.name} ({self.start_at} to {self.end_at})"
+        return f"Appointment {self.id} - {self.item.name} ({self.start_date} to {self.end_date})"
 
 
 # ============================================================================

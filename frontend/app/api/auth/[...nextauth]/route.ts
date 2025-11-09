@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import { jwtDecode } from "jwt-decode";
 import axiosInstance from "@/app/componente/axiosInstance";
+import { API_BASE_URL } from "@/lib/api";
 
 // Define our user type
 export interface MyUser extends User {
@@ -11,7 +12,8 @@ export interface MyUser extends User {
   username: string;
   email: string;
   is_superuser: boolean;
-  token?: string;
+  token?: string; // access
+  refresh?: string;
 }
 
 // Extend JWT type to include user
@@ -36,15 +38,16 @@ export const authOptions: NextAuthOptions = {
             username: credentials.username,
             password: credentials.password,
           });
-          const tokenData = jwtDecode(res.data.access);
+          const tokenData = jwtDecode(res.data.access) as any;
           if (res.data?.access) {
             const user: MyUser = {
-              id: res.data.id || res.data.username,
-              username: res.data.username,
+              id: String(tokenData.user_id ?? res.data.id ?? res.data.username),
+              username: tokenData.username ?? res.data.username,
               email: res.data.email || "",
               // @ts-ignore
-              is_superuser: tokenData.is_superuser,
-              token: res.data.access,
+              is_superuser: !!tokenData.is_superuser,
+              token: res.data.access, // access
+              refresh: res.data.refresh,
             };
             return user;
           }
@@ -66,9 +69,12 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       const myToken = token as MyJWT;
       if (myToken.user) {
+        const u = myToken.user as MyUser;
         session.user = {
           ...myToken.user,
-          is_superuser: !!myToken.user.is_superuser, // force boolean
+          is_superuser: !!u.is_superuser,
+          token: u.token,
+          refresh: u.refresh,
         } as MyUser;
       }
       return session;
