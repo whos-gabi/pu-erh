@@ -63,8 +63,10 @@ class RequestViewSet(viewsets.ModelViewSet):
         return Request.objects.filter(user=user)
     
     def perform_create(self, serializer):
-        """Creează cererea cu utilizatorul curent."""
-        serializer.save(user=self.request.user)
+        """Creează cererea cu utilizatorul curent și statusul WAITING."""
+        # Statusul este setat automat la WAITING (default din model)
+        # dar îl setăm explicit pentru claritate
+        serializer.save(user=self.request.user, status=Request.WAITING)
     
     def update(self, request, *args, **kwargs):
         """Actualizează cererea cu validări speciale."""
@@ -407,8 +409,11 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='by-date')
     def by_date(self, request):
         """
-        Returnează toate appointment-urile din ziua specificată.
+        Returnează toate appointment-urile și request-urile approved din ziua specificată.
+        Include și toate cererile care au fost approved pentru ziua respectivă.
         """
+        from apps.core.api import RequestSerializer
+        
         date_str = request.query_params.get('date')
         if not date_str:
             return Response(
@@ -429,16 +434,209 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             start_at__date=target_date
         ).select_related('user', 'item', 'item__category', 'request')
         
+        # Filtrează request-urile approved din ziua specificată
+        # Un request este relevant dacă date_start sau date_end se suprapun cu ziua target
+        approved_requests = Request.objects.filter(
+            status=Request.APPROVED
+        ).filter(
+            date_start__date__lte=target_date,
+            date_end__date__gte=target_date
+        ).select_related('user', 'room', 'room__category', 'decided_by')
+        
         # Aplică permisiunile: Employee vede doar propriile, SUPERADMIN vede toate
         user = request.user
         if not user.is_superuser:
             appointments = appointments.filter(user=user)
+            approved_requests = approved_requests.filter(user=user)
         
-        serializer = self.get_serializer(appointments, many=True)
+        appointments_serializer = self.get_serializer(appointments, many=True)
+        requests_serializer = RequestSerializer(approved_requests, many=True)
         
         return Response({
             'date': target_date.isoformat(),
-            'appointments': serializer.data,
-            'total': len(serializer.data)
+            'appointments': appointments_serializer.data,
+            'approved_requests': requests_serializer.data,
+            'total_appointments': len(appointments_serializer.data),
+            'total_approved_requests': len(requests_serializer.data),
+            'total': len(appointments_serializer.data) + len(requests_serializer.data)
+        })
+
+
+class AvailabilityViewSet(viewsets.ViewSet):
+    """
+    ViewSet pentru verificarea disponibilității resurselor (items/rooms).
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(
+        summary="Verifică disponibilitatea items/rooms pentru o dată",
+        description="Returnează pentru fiecare item/room dacă e liber sau ocupat. "
+                    "Pentru resurse ocupate, indică dacă e ocupată de un teammate și numele teammate-ului.",
+        tags=['Availability'],
+        parameters=[
+            OpenApiParameter(
+                name='user_id',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='ID-ul utilizatorului pentru care se verifică disponibilitatea'
+            ),
+            OpenApiParameter(
+                name='date',
+                type=OpenApiTypes.DATE,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='Data pentru care se verifică disponibilitatea (format: YYYY-MM-DD)'
+            ),
+        ],
+        responses={
+            200: {'description': 'Listă de resurse cu statusul lor de disponibilitate'},
+            400: {'description': 'Parametri lipsă sau invalizi'},
+            404: {'description': 'User nu a fost găsit'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='check')
+    def check_availability(self, request):
+        """
+        Verifică disponibilitatea items/rooms pentru o dată specificată.
+        Returnează liste separate pentru resurse libere și ocupate.
+        Pentru resurse ocupate, indică dacă e ocupată de un teammate.
+        """
+        from apps.core.models import Room, Item, User
+        from apps.core.api import RoomSerializer, ItemSerializer
+        
+        user_id = request.query_params.get('user_id')
+        date_str = request.query_params.get('date')
+        
+        if not user_id:
+            return Response(
+                {'error': 'Parametrul "user_id" este obligatoriu'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not date_str:
+            return Response(
+                {'error': 'Parametrul "date" este obligatoriu (format: YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User nu a fost găsit'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Format invalid pentru date. Folosește YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Obține toate items și rooms
+        all_items = Item.objects.filter(status=Item.ACTIVE).select_related('room', 'category')
+        all_rooms = Room.objects.all().select_related('category')
+        
+        # Obține appointments pentru ziua specificată
+        appointments = Appointment.objects.filter(
+            start_at__date=target_date
+        ).select_related('user', 'item')
+        
+        # Obține approved requests pentru ziua specificată
+        approved_requests = Request.objects.filter(
+            status=Request.APPROVED
+        ).filter(
+            date_start__date__lte=target_date,
+            date_end__date__gte=target_date
+        ).select_related('user', 'room')
+        
+        # Verifică dacă user-ul are teammates (din aceeași echipă)
+        user_team = target_user.team
+        teammate_ids = set()
+        if user_team:
+            teammates = User.objects.filter(team=user_team).exclude(id=target_user.id)
+            teammate_ids = set(teammates.values_list('id', flat=True))
+        
+        # Verifică disponibilitatea items
+        free_items = []
+        occupied_items = []
+        
+        for item in all_items:
+            # Verifică dacă item-ul este ocupat în ziua specificată
+            item_appointments = [apt for apt in appointments if apt.item_id == item.id]
+            
+            if not item_appointments:
+                # Item-ul este liber
+                item_data = ItemSerializer(item).data
+                item_data['is_available'] = True
+                item_data['occupied_by_teammate'] = False
+                item_data['teammate_name'] = None
+                free_items.append(item_data)
+            else:
+                # Item-ul este ocupat
+                # Verifică dacă e ocupat de un teammate
+                occupied_by_teammate = False
+                teammate_name = None
+                
+                for apt in item_appointments:
+                    if apt.user_id in teammate_ids:
+                        occupied_by_teammate = True
+                        teammate_name = f"{apt.user.first_name} {apt.user.last_name}".strip() or apt.user.username
+                        break
+                
+                item_data = ItemSerializer(item).data
+                item_data['is_available'] = False
+                item_data['occupied_by_teammate'] = occupied_by_teammate
+                item_data['teammate_name'] = teammate_name
+                occupied_items.append(item_data)
+        
+        # Verifică disponibilitatea rooms
+        free_rooms = []
+        occupied_rooms = []
+        
+        for room in all_rooms:
+            # Verifică dacă room-ul este ocupat în ziua specificată
+            room_requests = [req for req in approved_requests if req.room_id == room.id]
+            
+            if not room_requests:
+                # Room-ul este liber
+                room_data = RoomSerializer(room).data
+                room_data['is_available'] = True
+                room_data['occupied_by_teammate'] = False
+                room_data['teammate_name'] = None
+                free_rooms.append(room_data)
+            else:
+                # Room-ul este ocupat
+                # Verifică dacă e ocupat de un teammate
+                occupied_by_teammate = False
+                teammate_name = None
+                
+                for req in room_requests:
+                    if req.user_id in teammate_ids:
+                        occupied_by_teammate = True
+                        teammate_name = f"{req.user.first_name} {req.user.last_name}".strip() or req.user.username
+                        break
+                
+                room_data = RoomSerializer(room).data
+                room_data['is_available'] = False
+                room_data['occupied_by_teammate'] = occupied_by_teammate
+                room_data['teammate_name'] = teammate_name
+                occupied_rooms.append(room_data)
+        
+        return Response({
+            'user_id': target_user.id,
+            'username': target_user.username,
+            'date': target_date.isoformat(),
+            'free_items': free_items,
+            'occupied_items': occupied_items,
+            'free_rooms': free_rooms,
+            'occupied_rooms': occupied_rooms,
+            'total_free_items': len(free_items),
+            'total_occupied_items': len(occupied_items),
+            'total_free_rooms': len(free_rooms),
+            'total_occupied_rooms': len(occupied_rooms),
         })
 

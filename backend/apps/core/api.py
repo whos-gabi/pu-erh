@@ -91,7 +91,13 @@ class ItemSerializer(serializers.ModelSerializer):
 class RequestSerializer(serializers.ModelSerializer):
     """Serializer for Request model."""
     user = serializers.StringRelatedField(read_only=True)
-    room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
+    room = serializers.PrimaryKeyRelatedField(
+        queryset=Room.objects.all(),
+        error_messages={
+            'does_not_exist': 'Camera cu ID-ul "{pk_value}" nu există. Verifică că ai introdus un ID valid.',
+            'incorrect_type': 'ID-ul camerei trebuie să fie un număr întreg.'
+        }
+    )
     room_code = serializers.CharField(source='room.code', read_only=True)
     room_name = serializers.CharField(source='room.name', read_only=True)
     room_category_id = serializers.IntegerField(source='room.category.id', read_only=True)
@@ -105,7 +111,15 @@ class RequestSerializer(serializers.ModelSerializer):
             'room_category_id', 'room_category_name',
             'status', 'date_start', 'date_end', 'created_at', 'status_changed_at', 'decided_by', 'note'
         ]
-        read_only_fields = ['user', 'created_at', 'status_changed_at', 'decided_by']
+        read_only_fields = ['user', 'status', 'created_at', 'status_changed_at', 'decided_by']
+    
+    def validate_room(self, value):
+        """Validează că camera există și are o categorie."""
+        if not value:
+            raise serializers.ValidationError("Camera este obligatorie.")
+        if not hasattr(value, 'category') or not value.category:
+            raise serializers.ValidationError(f"Camera '{value.name}' nu are o categorie asociată.")
+        return value
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
