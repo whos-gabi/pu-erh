@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../auth/[...nextauth]/route"; // adjust path to your auth options
+import { authOptions } from "../auth/[...nextauth]/route";
+import { API_BASE_URL } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
-
-  if (!session) {
+  if (!session || !session.user?.token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -46,10 +46,43 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   } else {
     const text = await response.text();
-    console.error("API did not return JSON:", text);
     return NextResponse.json(
       { error: "API did not return JSON", details: text },
       { status: 500 }
     );
+  } catch {
+    return NextResponse.json(
+      { error: "Upstream request failed" },
+      { status: 502 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.text();
+    const auth = req.headers.get("authorization") || "";
+    const upstream = await fetch(`${API_BASE_URL}api/requests/`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: auth,
+      },
+      body,
+      cache: "no-store",
+    });
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: {
+        "content-type":
+          upstream.headers.get("content-type") || "application/json",
+      },
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: "Upstream request failed" }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    });
   }
 }

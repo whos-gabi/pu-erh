@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "framework": "nextjs",
+  "installCommand": "bun i",
+  "buildCommand": "bun run build",
+  "env": {
+    "NEXT_DISABLE_LIGHTNINGCSS": "1",
+    "TAILWIND_DISABLE_LIGHTNINGCSS": "1",
+    "DISABLE_LIGHTNINGCSS": "1"
+  }
+}
+
+

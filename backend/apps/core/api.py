@@ -1,7 +1,7 @@
 """
 DRF serializers and viewsets pentru gestionarea resurselor.
 """
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, extend_schema_field
 from rest_framework import serializers, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -73,22 +73,53 @@ class ItemSerializer(serializers.ModelSerializer):
 
 class RequestSerializer(serializers.ModelSerializer):
     """Serializer for Request model."""
-    user = serializers.StringRelatedField(read_only=True)
-    room_code = serializers.CharField(write_only=True, help_text="Codul camerei (ex: 'mr1', 'tr1')")
-    room = serializers.PrimaryKeyRelatedField(read_only=True)
-    room_name = serializers.CharField(source='room.name', read_only=True)
-    room_category_id = serializers.IntegerField(source='room.category.id', read_only=True)
-    room_category_name = serializers.CharField(source='room.category.name', read_only=True)
-    decided_by = serializers.StringRelatedField(read_only=True)
+    user = serializers.CharField(source='user.username', read_only=True)
+    room_code = serializers.CharField(write_only=True, help_text="Codul camerei (ex: 'meetingRoom1', 'beerPointArea', 'meetingLarge1')")
+    roomCode = serializers.SerializerMethodField(read_only=True, help_text="Codul camerei")
+    decided_by = serializers.CharField(source='decided_by.username', read_only=True, allow_null=True)
+    
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_roomCode(self, obj) -> str | None:
+        """Returnează codul camerei folosind doar room_id pentru a evita loop-uri."""
+        # Folosim doar room_id pentru a evita accesarea obiectului room
+        # care ar putea cauza loop-uri infinite
+        if not hasattr(obj, 'room_id') or not obj.room_id:
+            return None
+        
+        # Folosim cache-ul din context pentru a evita query-uri multiple
+        if hasattr(self, '_room_cache'):
+            room_cache = self._room_cache
+        else:
+            room_cache = {}
+            self._room_cache = room_cache
+        
+        # Dacă avem room_id în cache, folosim-l
+        if obj.room_id in room_cache:
+            return room_cache[obj.room_id]
+        
+        # Dacă nu, încercăm să obținem codul direct din baza de date
+        # fără a accesa obiectul room
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT code FROM core_room WHERE id = %s", [obj.room_id])
+                row = cursor.fetchone()
+                if row:
+                    code = row[0]
+                    room_cache[obj.room_id] = code
+                    return code
+        except Exception:
+            pass
+        
+        return None
     
     class Meta:
         model = Request
         fields = [
-            'id', 'user', 'room', 'room_code', 'room_name', 
-            'room_category_id', 'room_category_name',
+            'id', 'user', 'roomCode', 'room_code',
             'status', 'start_date', 'end_date', 'created_at', 'status_changed_at', 'decided_by', 'note'
         ]
-        read_only_fields = ['user', 'room', 'status', 'created_at', 'status_changed_at', 'decided_by']
+        read_only_fields = ['user', 'status', 'created_at', 'status_changed_at', 'decided_by']
     
     def validate_room_code(self, value):
         """Validează că camera cu acest cod există."""

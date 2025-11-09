@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { API_BASE_URL } from "@/lib/api";
 import { getUserReservations, type Reservation } from "@/lib/mockData";
@@ -7,29 +7,22 @@ import { getUserReservations, type Reservation } from "@/lib/mockData";
 export default function AccountPage() {
   const [profile, setProfile] = useState<any | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const didFetchRef = useRef(false);
   useEffect(() => {
+    if (didFetchRef.current) return;
+    didFetchRef.current = true; // prevent double-run in React StrictMode (dev)
     const userId = localStorage.getItem("pu-erh:user_id");
     const tokensRaw = localStorage.getItem("pu-erh:tokens");
     const access = tokensRaw ? (JSON.parse(tokensRaw).access as string | undefined) : undefined;
     // Fetch user profile
-    if (access) {
-      // Prefer /me first, then fallback to specific id if provided
-      const fetchProfile = async () => {
-        const me = await fetch(`/api/users/me/`, {
-          headers: { Authorization: `Bearer ${access}` },
-        });
-        if (me.ok) {
-          return me.json();
-        }
-        if (userId) {
-          const byId = await fetch(`/api/users/${userId}/`, {
-            headers: { Authorization: `Bearer ${access}` },
-          });
-          if (byId.ok) return byId.json();
-        }
-        throw new Error("profile_fetch_failed");
-      };
-      fetchProfile()
+    if (access && userId) {
+      fetch(`/api/users/${userId}/`, {
+        headers: { Authorization: `Bearer ${access}` },
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.json();
+        })
         .then((data) => setProfile(data))
         .catch(() => setProfile(null));
       setReservations(getUserReservations(userId));
@@ -52,17 +45,17 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="mt-2 text-2xl font-semibold">Account</h1>
+      {/* <h1 className="mt-2 text-2xl font-semibold">Account</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Your info and reservations
-      </p>
+      </p> */}
 
-      {/* Profile card */}
-      <div className="mt-6">
+      {/* Profile card - compact, hero-like */}
+      <div className="mt-3">
         <div className="rounded-xl p-6 bg-gradient-to-br from-black to-zinc-900 text-white shadow-[0_10px_35px_rgba(255,0,0,0.25)]">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-12 w-12 bg-white/10">
-              <AvatarFallback className="text-white/90">
+          <div className="flex items-center gap-5">
+            <Avatar className="h-16 w-16 bg-white/10">
+              <AvatarFallback className="text-white/90 text-lg">
                 {(() => {
                   const fn = (profile?.first_name ?? "").toString();
                   const ln = (profile?.last_name ?? "").toString();
@@ -75,100 +68,119 @@ export default function AccountPage() {
               </AvatarFallback>
             </Avatar>
             <div>
-              <div className="text-lg font-semibold">
+              <div className="text-2xl font-semibold">
                 {profile ? `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim() || profile.username : "—"}
               </div>
-              <div className="text-xs text-white/70">{profile?.email ?? "—"}</div>
-            </div>
-          </div>
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Username</div>
-              <div className="mt-1">{profile?.username ?? "—"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">First name</div>
-              <div className="mt-1">{profile?.first_name ?? "—"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Last name</div>
-              <div className="mt-1">{profile?.last_name ?? "—"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Active</div>
-              <div className="mt-1">{profile?.is_active ? "Yes" : "No"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Staff</div>
-              <div className="mt-1">{profile?.is_staff ? "Yes" : "No"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Role</div>
-              <div className="mt-1">{profile?.role ?? "—"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Team</div>
-              <div className="mt-1">{profile?.team ?? "—"}</div>
-            </div>
-            <div className="rounded-lg bg-white/5 p-4 backdrop-blur-md">
-              <div className="text-white/60">Joined</div>
-              <div className="mt-1">
-                {profile?.date_joined ? new Date(profile.date_joined).toLocaleString() : "—"}
+              <div className="text-xs text-white/60">
+                @{profile?.username ?? "—"} • {profile?.email ?? "—"}
               </div>
             </div>
+          </div>
+          {/* Compact meta */}
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/70">
+            <span className="rounded-full bg-white/10 px-3 py-1">
+              Role: {profile?.role ?? "—"}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1">
+              Team: {profile?.team ?? "—"}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1">
+              Active: {profile?.is_active ? "Yes" : "No"}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1">
+              Staff: {profile?.is_staff ? "Yes" : "No"}
+            </span>
+            <span className="rounded-full bg-white/10 px-3 py-1">
+              Joined: {profile?.date_joined ? new Date(profile.date_joined).toLocaleDateString() : "—"}
+            </span>
           </div>
         </div>
       </div>
 
       <div className="mt-8 grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2">
-          <section>
-            <h2 className="text-lg font-semibold">Upcoming reservations</h2>
-            <div className="mt-3 divide-y rounded-xl border">
-              {future.map((r) => (
-                <div key={r.id} className="flex items-center justify-between p-4">
-                  <div className="text-sm">
-                    <div className="font-medium">{r.seatLabel}</div>
-                    <div className="text-muted-foreground">
-                      {r.date} • Floor {r.floor}
-                    </div>
-                  </div>
-                  <div className="text-xs rounded-full border px-2 py-1">
-                    {r.status}
-                  </div>
-                </div>
-              ))}
-              {future.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">
-                  No upcoming reservations.
-                </div>
-              ) : null}
-            </div>
-          </section>
+          {(() => {
+            const fmt = (iso?: string) =>
+              iso ? new Date(iso).toLocaleString() : "—";
+            const toRows = (when: "today" | "future" | "past") => {
+              const appts: Array<{
+                id: string
+                start_date?: string
+                resource_name?: string
+                status?: string
+              }> = Array.isArray(profile?.appointments?.[when])
+                ? profile.appointments[when].map((a: any) => ({
+                    id: `appt-${String(a.id)}`,
+                    start_date: a.start_date,
+                    resource_name: a.resource_name,
+                    status: "BOOKED",
+                  }))
+                : [];
+              const reqs: Array<{
+                id: string
+                start_date?: string
+                resource_name?: string
+                status?: string
+              }> = Array.isArray(profile?.requests?.[when])
+                ? profile.requests[when].map((r: any) => ({
+                    id: `req-${String(r.id)}`,
+                    start_date: r.start_date,
+                    resource_name: r.resource_name,
+                    status: r.status,
+                  }))
+                : [];
+              const rows = [...appts, ...reqs].sort((a, b) =>
+                (a.start_date ?? "").localeCompare(b.start_date ?? "")
+              );
+              return rows;
+            };
 
-          <section className="mt-8">
-            <h2 className="text-lg font-semibold">Past reservations</h2>
-            <div className="mt-3 divide-y rounded-xl border">
-              {past.map((r) => (
-                <div key={r.id} className="flex items-center justify-between p-4">
-                  <div className="text-sm">
-                    <div className="font-medium">{r.seatLabel}</div>
-                    <div className="text-muted-foreground">
-                      {r.date} • Floor {r.floor}
+            const todayRows = toRows("today");
+            const futureRows = toRows("future");
+            const pastRows = toRows("past");
+
+            const Section = ({
+              title,
+              rows,
+              emptyText,
+            }: {
+              title: string
+              rows: Array<{ id: string; start_date?: string; resource_name?: string; status?: string }>
+              emptyText: string
+            }) => (
+              <section className="mt-0 first:mt-0">
+                <h2 className="text-lg font-semibold">{title}</h2>
+                <div className="mt-3 divide-y rounded-xl border">
+                  {rows.map((row) => (
+                    <div key={`${title}-${row.id}-${row.start_date ?? ""}`} className="flex items-center justify-between p-4">
+                      <div className="text-sm">
+                        <div className="font-medium">{row.resource_name ?? "—"}</div>
+                        <div className="text-muted-foreground">
+                          {fmt(row.start_date)}
+                        </div>
+                      </div>
+                      <div className="text-xs rounded-full border px-2 py-1">
+                        {row.status ?? "—"}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-xs rounded-full border px-2 py-1">
-                    {r.status}
-                  </div>
+                  ))}
+                  {rows.length === 0 ? (
+                    <div className="p-6 text-sm text-muted-foreground">{emptyText}</div>
+                  ) : null}
                 </div>
-              ))}
-              {past.length === 0 ? (
-                <div className="p-6 text-sm text-muted-foreground">
-                  No past reservations.
-                </div>
-              ) : null}
-            </div>
-          </section>
+              </section>
+            );
+
+            return (
+              <>
+                <Section title="Today" rows={todayRows} emptyText="No items for today." />
+                <div className="h-6" />
+                <Section title="Future" rows={futureRows} emptyText="No upcoming items." />
+                <div className="h-6" />
+                <Section title="Past" rows={pastRows} emptyText="No past items." />
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

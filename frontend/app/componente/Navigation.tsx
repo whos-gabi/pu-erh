@@ -54,13 +54,13 @@ export default function Navigation() {
                 </Link>
                 <Link className="w-full" href="/reserve">
                   <div className="py-5 px-3">Reservation</div>
-                </Link>
+            </Link>
               </>
             ) : null}
             {!isAuthed ? (
               <Link className="w-full" href="/login">
                 <div className="py-5 px-3">Login</div>
-              </Link>
+            </Link>
             ) : (
               <button
                 onClick={handleLogout}

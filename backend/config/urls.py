@@ -20,6 +20,8 @@ from apps.core.viewsets import (
     RequestViewSet,
     AppointmentViewSet,
     AvailabilityViewSet,
+    AppAndReqViewSet,
+    ItemOccupancyStatsViewSet,
 )
 from apps.core.policy_views import (
     OrgPolicyViewSet,
@@ -46,7 +48,9 @@ router.register(r'rooms', RoomViewSet, basename='room')
 router.register(r'items', ItemViewSet, basename='item')
 router.register(r'requests', RequestViewSet, basename='request')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
+router.register(r'appandreq', AppAndReqViewSet, basename='appandreq')
 router.register(r'availability', AvailabilityViewSet, basename='availability')
+router.register(r'item-occupancy-stats', ItemOccupancyStatsViewSet, basename='item-occupancy-stats')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

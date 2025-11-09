@@ -27,15 +27,18 @@ export function isMassageArea(id: string): boolean {
 }
 
 export function requiresApproval(id: string): boolean {
-  // Require approval for: meetingLarge1/2+, beerPointArea*, meetingRoom1-4
-  if (isMeetingLargeId(id)) return true;
+  // Require approval for:
+  // - meetingLarge{n} and meetingLargeArea{n}
+  // - beerPointArea*
+  // - meetingRoom{1-6} and meetingRoomArea{1-6}
   if (isBeerPointArea(id)) return true;
-  if (isMeetingRoomId(id)) {
-    const m = id.match(/meetingRoom(\d+)/i);
-    const num = m ? parseInt(m[1], 10) : NaN;
-    if (!Number.isNaN(num) && num >= 1 && num <= 4) {
-      return true;
-    }
+  // Match both base and Area variants
+  const large = id.match(/meetingLarge(?:Area)?(\d+)/i);
+  if (large) return true;
+  const room = id.match(/meetingRoom(?:Area)?(\d+)/i);
+  if (room) {
+    const num = parseInt(room[1], 10);
+    if (!Number.isNaN(num) && num >= 1 && num <= 6) return true;
   }
   return false;
 }

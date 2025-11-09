@@ -23,9 +23,56 @@ from apps.notify.services import (
 
 
 @extend_schema_view(
-    list=extend_schema(tags=['Requests'], summary='Listează cererile'),
-    retrieve=extend_schema(tags=['Requests'], summary='Obține detalii despre o cerere'),
-    create=extend_schema(tags=['Requests'], summary='Creează o cerere nouă'),
+    list=extend_schema(
+        tags=['Requests'], 
+        summary='Listează cererile',
+        description='Returnează lista de cereri. Employee vede doar propriile cereri, SUPERADMIN vede toate. '
+                    'Fiecare cerere include roomCode (ex: meetingRoom1, beerPointArea, meetingLarge1).'
+    ),
+    retrieve=extend_schema(
+        tags=['Requests'], 
+        summary='Obține detalii despre o cerere',
+        description='Returnează detaliile unei cereri specifice. Include roomCode (ex: meetingRoom1, beerPointArea, meetingLarge1).'
+    ),
+    create=extend_schema(
+        tags=['Requests'], 
+        summary='Creează o cerere nouă',
+        description='Creează o cerere nouă pentru rezervarea unei camere. Statusul este setat automat la WAITING. '
+                    'Room codes disponibile: meetingRoom1, meetingRoom2, meetingRoom3, meetingRoom4, meetingRoom5, '
+                    'meetingRoom6, meetingLarge1, meetingLarge2, beerPointArea.',
+        request={
+            'application/json': {
+                'example': {
+                    'room_code': 'meetingRoom1',
+                    'start_date': '2025-01-15T10:00:00Z',
+                    'end_date': '2025-01-15T12:00:00Z',
+                    'note': 'Meeting cu echipa de dezvoltare'
+                }
+            }
+        },
+        responses={
+            201: {
+                'description': 'Cerere creată cu succes',
+                'content': {
+                    'application/json': {
+                        'example': {
+                            'id': 1,
+                            'user': 'john.doe',
+                            'roomCode': 'meetingRoom1',
+                            'status': 'WAITING',
+                            'start_date': '2025-01-15T10:00:00Z',
+                            'end_date': '2025-01-15T12:00:00Z',
+                            'note': 'Meeting cu echipa de dezvoltare',
+                            'created_at': '2025-01-10T08:00:00Z',
+                            'status_changed_at': '2025-01-10T08:00:00Z',
+                            'decided_by': None
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Date invalide sau camera nu există. Verifică că room_code este valid (ex: meetingRoom1, beerPointArea).'}
+        }
+    ),
     update=extend_schema(tags=['Requests'], summary='Actualizează o cerere'),
     destroy=extend_schema(tags=['Requests'], summary='Șterge o cerere'),
 )
@@ -158,14 +205,14 @@ class RequestViewSet(viewsets.ModelViewSet):
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
                 required=True,
-                description='Codul camerei (ex: meetingRoom1, beerPointArea)'
+                description='Codul camerei. Exemple: meetingRoom1, meetingRoom2, meetingRoom3, meetingRoom4, meetingRoom5, meetingRoom6, meetingLarge1, meetingLarge2, beerPointArea'
             ),
             OpenApiParameter(
                 name='date',
                 type=OpenApiTypes.DATE,
                 location=OpenApiParameter.QUERY,
                 required=True,
-                description='Data pentru care se caută request-urile (format: YYYY-MM-DD). Ex: 2024-01-15'
+                description='Data pentru care se caută request-urile (format: YYYY-MM-DD). Ex: 2025-01-15'
             ),
         ],
         responses={
@@ -268,7 +315,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     
     Permisiuni:
     - GET: Employee vede doar propriile programări, SUPERADMIN vede toate
-    - POST/PUT/DELETE: doar SUPERADMIN
+    - POST: orice utilizator autentificat poate crea programări
+    - PUT: orice utilizator autentificat poate actualiza propriile programări
+    - DELETE: orice utilizator autentificat poate șterge propriile programări
     """
     queryset = Appointment.objects.all()
     serializer_class = AppointmentSerializer
@@ -276,8 +325,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         """Permisiuni diferite pentru acțiuni diferite."""
-        if self.action in ['create', 'update', 'destroy']:
-            return [IsSuperAdmin()]
+        # Orice utilizator autentificat poate face POST/PUT/DELETE
+        # (cu validări în metodele respective pentru a asigura că poate modifica doar propriile appointments)
         return super().get_permissions()
     
     def get_queryset(self):
@@ -292,11 +341,15 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         return Appointment.objects.filter(user=user)
     
     def perform_create(self, serializer):
-        """Creează programarea (doar SUPERADMIN)."""
-        # User-ul poate fi setat din serializer sau implicit din request
+        """Creează programarea - orice utilizator autentificat."""
+        # User-ul este setat automat la utilizatorul curent
         if 'user' not in serializer.validated_data:
             appointment = serializer.save(user=self.request.user)
         else:
+            # Dacă user este specificat, verifică că este utilizatorul curent (sau SUPERADMIN)
+            if serializer.validated_data['user'] != self.request.user and not self.request.user.is_superuser:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Nu poți crea programări pentru alți utilizatori.")
             appointment = serializer.save()
         
         # Trimite notificare prin email după ce appointment-ul este creat cu succes
@@ -304,6 +357,34 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         # înainte de a trimite email-ul
         from django.db import transaction
         transaction.on_commit(lambda: notify_appointment_summary(appointment))
+    
+    def update(self, request, *args, **kwargs):
+        """Actualizează programarea - doar proprietarul poate actualiza propria programare."""
+        instance = self.get_object()
+        user = request.user
+        
+        # Orice utilizator poate actualiza doar propriile programări
+        if instance.user != user:
+            return Response(
+                {'detail': 'Nu ai permisiunea să actualizezi această programare.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Șterge programarea - doar proprietarul poate șterge propria programare."""
+        instance = self.get_object()
+        user = request.user
+        
+        # Orice utilizator poate șterge doar propriile programări
+        if instance.user != user:
+            return Response(
+                {'detail': 'Nu ai permisiunea să ștergi această programare.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        return super().destroy(request, *args, **kwargs)
     
     @extend_schema(
         tags=['Appointments'],
@@ -839,5 +920,158 @@ class AppAndReqViewSet(viewsets.ViewSet):
             'total_appointments': len(appointments_serializer.data),
             'total_approved_requests': len(requests_serializer.data),
             'total': len(appointments_serializer.data) + len(requests_serializer.data)
+        })
+
+
+class ItemOccupancyStatsViewSet(viewsets.ViewSet):
+    """
+    ViewSet pentru statisticile de ocupabilitate items.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    @extend_schema(
+        summary="Obține statisticile de ocupabilitate pentru un item specific",
+        description="Returnează pentru un item specific o listă cu zilele de luni până vineri, "
+                    "iar pentru fiecare zi o listă cu perechile (hour, popularity).",
+        tags=['Item Occupancy Stats'],
+        parameters=[
+            OpenApiParameter(
+                name='item_id',
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='ID-ul item-ului pentru care se caută statisticile'
+            ),
+        ],
+        responses={
+            200: {
+                'description': 'Statistici de ocupabilitate pentru item',
+                'content': {
+                    'application/json': {
+                        'example': {
+                            'item_id': 2,
+                            'item_name': 'scaun1',
+                            'weekdays': [
+                                {
+                                    'weekday': 'Monday',
+                                    'hours': [
+                                        {'hour': 8, 'popularity': 100},
+                                        {'hour': 9, 'popularity': 50}
+                                    ]
+                                },
+                                {
+                                    'weekday': 'Tuesday',
+                                    'hours': []
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            400: {'description': 'Parametrul item_id lipsă sau invalid'},
+            404: {'description': 'Item nu a fost găsit'}
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='stats')
+    def get_stats(self, request):
+        """
+        Returnează statisticile de ocupabilitate pentru un item specific.
+        Pentru item: zilele de luni-vineri, iar pentru fiecare zi: lista de (hour, popularity).
+        """
+        from django.db import connection
+        from apps.core.models import Item
+        
+        item_id = request.query_params.get('item_id')
+        if not item_id:
+            return Response(
+                {'error': 'Parametrul "item_id" este obligatoriu'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            item_id = int(item_id)
+        except ValueError:
+            return Response(
+                {'error': 'Parametrul "item_id" trebuie să fie un număr întreg'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verifică dacă item-ul există
+        try:
+            item = Item.objects.get(id=item_id, status=Item.ACTIVE)
+        except Item.DoesNotExist:
+            return Response(
+                {'error': f'Item cu ID-ul {item_id} nu a fost găsit sau nu este activ'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Zilele de lucru (luni-vineri)
+        weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+        
+        # Query pentru a obține statisticile pentru item-ul specificat
+        rows = []
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 
+                        s.weekday,
+                        s.hour,
+                        s.popularity
+                    FROM core_item_occupancy_stats s
+                    WHERE s.item_id = %s
+                        AND s.weekday IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+                    ORDER BY 
+                        CASE s.weekday
+                            WHEN 'Monday' THEN 1
+                            WHEN 'Tuesday' THEN 2
+                            WHEN 'Wednesday' THEN 3
+                            WHEN 'Thursday' THEN 4
+                            WHEN 'Friday' THEN 5
+                        END,
+                        s.hour
+                """, [item_id])
+                
+                rows = cursor.fetchall()
+        except Exception as e:
+            # Dacă tabelul nu există sau apare o altă eroare, returnăm date goale
+            # (toate orele cu popularity 0)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Eroare la interogarea core_item_occupancy_stats: {e}")
+            rows = []
+        
+        # Creează un dict pentru a stoca datele din baza de date
+        stats_dict = {}
+        for row in rows:
+            weekday, hour, popularity = row
+            if weekday not in stats_dict:
+                stats_dict[weekday] = {}
+            # Convertim hour și popularity la int pentru a evita probleme cu Decimal
+            hour_int = int(hour) if hour is not None else 0
+            popularity_int = int(popularity) if popularity is not None else 0
+            stats_dict[weekday][hour_int] = popularity_int
+        
+        # Inițializează toate zilele cu toate orele de la 0 la 23
+        weekdays_data = []
+        for day in weekdays:
+            hours_list = []
+            # Pentru fiecare oră de la 0 la 23
+            for hour in range(24):
+                # Dacă există date în baza de date, folosește-le, altfel popularity = 0
+                popularity = stats_dict.get(day, {}).get(hour, 0)
+                hours_list.append({
+                    'hour': hour,
+                    'popularity': popularity
+                })
+            
+            weekdays_data.append({
+                'weekday': day,
+                'hours': hours_list
+            })
+        
+        return Response({
+            'item_id': item.id,
+            'item_name': item.name,
+            'weekdays': weekdays_data
         })
 

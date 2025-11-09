@@ -1,8 +1,15 @@
 import { API_BASE_URL } from "@/lib/api";
+import type { NextRequest } from "next/server";
 
-export async function GET(req: Request, context: { params: { id?: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   // Be defensive: get id from params or URL path
-  let id = context.params?.id;
+  let id: string | undefined;
+  try {
+    const p = await context.params;
+    id = p?.id;
+  } catch {
+    // ignore
+  }
   if (!id) {
     try {
       const url = new URL(req.url);
