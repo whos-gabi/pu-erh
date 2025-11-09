@@ -14,8 +14,8 @@ export default function Navigation() {
       const u = localStorage.getItem("pu-erh:user");
       setIsAuthed(!!u);
       if (u) {
-        const parsed = JSON.parse(u) as { role?: string };
-        setRole(parsed.role ?? null);
+        const parsed = JSON.parse(u) as { is_superuser?: boolean };
+        setRole(parsed.is_superuser ? "Admin" : "Member");
       } else {
         setRole(null);
       }
@@ -38,33 +38,33 @@ export default function Navigation() {
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <Link className="w-full" href="/">
-              <div className="py-4 px-5 font-bold text-l">Pu erh</div>
+              <div className="py-4 px-5 font-bold text-l">BookMe.</div>
             </Link>
           </div>
           <div className="hidden items-center gap-2 md:flex">
             {isAuthed && role === "Admin" ? (
               <Link className="w-full" href="/dashboard">
-                <div className="py-5 px-0">Dashboard</div>
+                <div className="py-5 px-3">Dashboard</div>
               </Link>
             ) : null}
             {isAuthed && role === "Member" ? (
               <>
                 <Link className="w-full" href="/account">
-                  <div className="py-5 px-0">Account</div>
+                  <div className="py-5 px-3">Account</div>
                 </Link>
                 <Link className="w-full" href="/reserve">
-                  <div className="py-5 px-0">Reservation</div>
+                  <div className="py-5 px-3">Reservation</div>
                 </Link>
               </>
             ) : null}
             {!isAuthed ? (
               <Link className="w-full" href="/login">
-                <div className="py-5 px-0">Login</div>
+                <div className="py-5 px-3">Login</div>
               </Link>
             ) : (
               <button
                 onClick={handleLogout}
-                className="py-5 px-0 hover:bg-white/10"
+                className="py-5 px-3 hover:bg-white/10"
               >
                 Logout
               </button>

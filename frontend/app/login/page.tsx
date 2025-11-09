@@ -5,15 +5,33 @@ import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("Alex Pop");
-  const [password, setPassword] = useState("alex.pop@example.com");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const router = useRouter();
   const { data: session } = useSession();
 
   // Automatically redirect if logged in
   useEffect(() => {
     if (session?.user) {
-      console.log(session.user);
+      // Persist tokens and user identity for API calls and navbar
+      try {
+        const access = (session.user as any).token as string | undefined;
+        const refresh = (session.user as any).refresh as string | undefined;
+        const user_id = (session.user as any).id as string | undefined;
+        const uname = (session.user as any).username as string | undefined;
+        const is_superuser = !!(session.user as any).is_superuser;
+        if (access && refresh) {
+          localStorage.setItem("pu-erh:tokens", JSON.stringify({ access, refresh }));
+        }
+        if (user_id || uname) {
+          localStorage.setItem(
+            "pu-erh:user",
+            JSON.stringify({ id: user_id, username: uname, is_superuser })
+          );
+          if (user_id) localStorage.setItem("pu-erh:user_id", user_id);
+        }
+      } catch {}
+
       if (session.user.is_superuser) {
         router.push("/dashboard");
       } else {
@@ -36,7 +54,7 @@ export default function LoginPage() {
     <div className="mx-auto max-w-md">
       <h1 className="mt-6 text-2xl font-semibold">Login</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Mocked login for now. Backend coming soon.
+        Enter your credentials to continue.
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div className="space-y-1.5">

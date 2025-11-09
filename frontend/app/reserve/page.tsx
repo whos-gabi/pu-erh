@@ -1,103 +1,72 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import {
   addReservation,
   getMockUser,
   Reservation,
   type PuErhUser,
 } from "@/lib/mockData";
+import { requiresApproval } from "@/lib/roomTypes";
 import { Button } from "@/components/ui/button";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
   SheetFooter,
+  SheetDescription,
 } from "@/components/ui/sheet";
+import { API_BASE_URL } from "@/lib/api";
 
 type SelectedSeat = {
   id: string;
   label: string;
 };
 
+const MapComponent = dynamic(() => import("@/components/InteractiveMap"), {
+  ssr: false,
+  loading: () => <p>Loading map...</p>,
+});
+
 export default function ReservePage() {
-  const svgContainerRef = useRef<HTMLDivElement | null>(null);
-  const [svgMarkup, setSvgMarkup] = useState<string>("");
   const [selected, setSelected] = useState<SelectedSeat | null>(null);
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const formatLocalYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+  const todayLocal = formatLocalYMD(new Date());
+  const [date, setDate] = useState<string>(todayLocal);
+  const [activeDate, setActiveDate] = useState<string>(todayLocal);
   const [user, setUser] = useState<PuErhUser | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const needsApproval = selected ? requiresApproval(selected.id) : false;
 
   useEffect(() => {
     setUser(getMockUser());
   }, []);
 
   useEffect(() => {
-    // Load svg
-    fetch("/floor4.svg")
-      .then((r) => r.text())
-      .then((text) => {
-        setSvgMarkup(text);
-      })
-      .catch(() => {});
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
   }, []);
-
-  useEffect(() => {
-    if (!svgContainerRef.current) return;
-    const root = svgContainerRef.current;
-    // Clean previous listeners by cloning node
-    const clone = root.cloneNode(true) as HTMLDivElement;
-    root.replaceWith(clone);
-    svgContainerRef.current = clone;
-
-    const svg = clone.querySelector("svg");
-    if (!svg) return;
-    const groups = Array.from(svg.querySelectorAll("g"));
-
-    groups.forEach((g, idx) => {
-      (g as unknown as HTMLElement).style.cursor = "pointer";
-      g.setAttribute("data-seat-label", g.getAttribute("id") || `G-${idx + 1}`);
-
-      const handleEnter = () => {
-        g.setAttribute("data-hover", "1");
-        g.querySelectorAll("*").forEach((el) => {
-          const elAny = el as HTMLElement;
-          const prev = elAny.getAttribute("data-prev-fill");
-          if (!prev && (elAny as any).style && (elAny as any).style.fill) {
-            elAny.setAttribute("data-prev-fill", (elAny as any).style.fill);
-          }
-          (elAny as any).style.fill = "rgba(0,0,0,0.2)";
-        });
-      };
-      const handleLeave = () => {
-        g.removeAttribute("data-hover");
-        g.querySelectorAll("*").forEach((el) => {
-          const elAny = el as HTMLElement;
-          const prev = elAny.getAttribute("data-prev-fill");
-          if (prev !== null) {
-            (elAny as any).style.fill = prev;
-          } else {
-            (elAny as any).style.fill = "";
-          }
-        });
-      };
-      const handleClick = () => {
-        const label = g.getAttribute("data-seat-label") || g.getAttribute("id") || "Seat";
-        setSelected({ id: label, label });
-      };
-      g.addEventListener("mouseenter", handleEnter);
-      g.addEventListener("mouseleave", handleLeave);
-      g.addEventListener("click", handleClick);
-    });
-
-    return () => {
-      groups.forEach((g) => {
-        g.replaceWith(g.cloneNode(true));
-      });
-    };
-  }, [svgMarkup]);
 
   const confirmReservation = () => {
     if (!user || !selected || !date) return;
+    // simulate backend call
+    // eslint-disable-next-line no-console
+    console.log("POST", `${API_BASE_URL}reservations`, {
+      user: user.email,
+      objectId: selected.id,
+      date,
+    });
     const reservation: Reservation = {
       id: `r-${Date.now()}`,
       userId: user.id,
@@ -109,64 +78,159 @@ export default function ReservePage() {
     };
     addReservation(reservation);
     setSelected(null);
-    alert("Reservation confirmed!");
   };
+
+  const requestApproval = () => {
+    if (!user || !selected || !date) return;
+    // simulate backend call
+    // eslint-disable-next-line no-console
+    console.log("POST", `${API_BASE_URL}approvals`, {
+      user: user.email,
+      objectId: selected.id,
+      date,
+    });
+    // simulate approval request
+    setSelected(null);
+  };
+
+  const handleSheetOpenChange = (open: boolean) => {
+    if (!open) setSelected(null);
+  };
+
+  // Build date tabs items (today -> +30 days)
+  const tabItems = (() => {
+    const days = 30;
+    const items: { label: string; value: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i <= days; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      const value = formatLocalYMD(d);
+      const label = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+      items.push({ label, value });
+    }
+    return items;
+  })();
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mt-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Make a reservation</h1>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Click a highlighted desk on the floor plan to select it. Hover to preview.
-      </p>
+      <div className="mt-3">
+        <Tabs
+          defaultValue={activeDate}
+          onValueChange={(v) => {
+            setActiveDate(v);
+            setDate(v);
+            // simulate API call on date change
+            // eslint-disable-next-line no-console
+            console.log("Simulating API call for date:", v);
+          }}
+          className="gap-1"
+        >
+          <ScrollArea>
+            <TabsList className="mb-3 w-max">
+              {tabItems.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </Tabs>
+      </div>
 
-      <div className="mt-6 overflow-auto rounded-xl border bg-white p-4">
-        <div
-          ref={svgContainerRef}
-          className="relative"
-          dangerouslySetInnerHTML={{ __html: svgMarkup }}
+      <div className="mt-4 w-full">
+        <MapComponent
+          activeDate={activeDate}
+          onSelect={(id) => setSelected(id ? { id, label: id } : null)}
         />
       </div>
 
-      <Sheet open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent side="right">
-          <SheetHeader>
-            <SheetTitle>Reserve seat</SheetTitle>
-          </SheetHeader>
-          <div className="p-4">
-            {selected ? (
-              <div className="space-y-4">
-                <div className="text-sm">
-                  <div className="text-muted-foreground">Selected seat</div>
-                  <div className="mt-1 text-lg font-semibold">
-                    {selected.label} • Floor 4
+      {!isDesktop && (
+        <Sheet open={!!selected} onOpenChange={handleSheetOpenChange}>
+          <SheetContent
+            side="bottom"
+            className="transition-all duration-300 rounded-t-2xl h-80 max-h-[80vh] overflow-y-auto z-[60]"
+          >
+            <SheetHeader>
+              <SheetTitle>Reserve seat</SheetTitle>
+              <SheetDescription className="sr-only">Reservation details</SheetDescription>
+            </SheetHeader>
+            <div className="p-2">
+              {selected ? (
+                <div className="space-y-3">
+                  <div className="text-sm">
+                    <div className="text-muted-foreground">Selected</div>
+                    <div className="mt-1 text-base font-semibold">
+                      {selected.label} • Floor 4 • Data {date}
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm">Date</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-md border bg-background px-3 py-2"
-                  />
+              ) : null}
+            </div>
+            <SheetFooter>
+              {needsApproval ? (
+                <Button onClick={requestApproval} disabled={!user}>
+                  Request approval
+                </Button>
+              ) : (
+                <Button onClick={confirmReservation} disabled={!user}>
+                  Make appointment
+                </Button>
+              )}
+              {!user ? (
+                <div className="text-xs text-muted-foreground">
+                  Please login to reserve.
                 </div>
-              </div>
-            ) : null}
-          </div>
-          <SheetFooter>
-            <Button onClick={confirmReservation} disabled={!user}>
-              Confirm reservation
-            </Button>
-            {!user ? (
-              <div className="text-xs text-muted-foreground">
-                Please login to reserve.
-              </div>
-            ) : null}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+              ) : null}
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {isDesktop && (
+        <Sheet open={!!selected} onOpenChange={handleSheetOpenChange}>
+          <SheetContent
+            side="left"
+            className="transition-all duration-300 h-full w-80 p-5 z-[60]"
+          >
+            <SheetHeader>
+              <SheetTitle>Reserve seat</SheetTitle>
+              <SheetDescription className="sr-only">Reservation details</SheetDescription>
+            </SheetHeader>
+            <div className="mt-2">
+              {selected ? (
+                <div className="space-y-4">
+                  <div className="text-sm">
+                    <div className="text-muted-foreground">Selected</div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {selected.label} • Floor 4 • Data {date}
+                    </div>
+                  </div>
+                  {needsApproval ? (
+                    <Button onClick={requestApproval} disabled={!user} className="w-full">
+                      Request approval
+                    </Button>
+                  ) : (
+                    <Button onClick={confirmReservation} disabled={!user} className="w-full">
+                      Make appointment
+                    </Button>
+                  )}
+                  {!user ? (
+                    <div className="text-xs text-muted-foreground">
+                      Please login to reserve.
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Select an element on the map.</div>
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

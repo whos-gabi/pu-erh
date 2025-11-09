@@ -6,6 +6,8 @@ declare module "next-auth" {
       id: string;
       username: string;
       is_superuser: boolean;
+      token?: string;
+      refresh?: string;
     };
   }
 
@@ -13,5 +15,7 @@ declare module "next-auth" {
     id: string;
     username: string;
     is_superuser: boolean;
+    token?: string;
+    refresh?: string;
   }
 }
