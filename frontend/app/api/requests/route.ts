@@ -50,11 +50,6 @@ export async function GET(req: NextRequest) {
       { error: "API did not return JSON", details: text },
       { status: 500 }
     );
-  } catch {
-    return NextResponse.json(
-      { error: "Upstream request failed" },
-      { status: 502 }
-    );
   }
 }
 
