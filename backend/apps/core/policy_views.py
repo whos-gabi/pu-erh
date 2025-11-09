@@ -1,8 +1,9 @@
 """
 ViewSets pentru gestionarea politicilor organizaționale și a echipelor.
 """
-from drf_spectacular.utils import extend_schema
-from rest_framework import viewsets, status
+from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
+from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -12,6 +13,12 @@ from .models import OrgPolicy, Team
 from .permissions import IsSuperAdmin
 
 
+class OrgPolicySerializer(serializers.Serializer):
+    """Serializer pentru OrgPolicy."""
+    default_required_days_per_week = serializers.IntegerField(min_value=0, max_value=7)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
 class OrgPolicyViewSet(viewsets.ViewSet):
     """
     ViewSet pentru gestionarea politicii organizaționale de prezență.
@@ -19,11 +26,15 @@ class OrgPolicyViewSet(viewsets.ViewSet):
     Singleton pattern - există un singur policy pentru organizație.
     """
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    serializer_class = OrgPolicySerializer
     
     @extend_schema(
         tags=['Policy'],
         summary='Obține politica organizațională',
         description='Returnează politica curentă de prezență (default_required_days_per_week).',
+        responses={
+            200: OrgPolicySerializer
+        }
     )
     def list(self, request):
         """Returnează politica organizațională."""

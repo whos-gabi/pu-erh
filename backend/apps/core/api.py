@@ -1,7 +1,7 @@
 """
 DRF serializers and viewsets pentru gestionarea resurselor.
 """
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, extend_schema_field
 from rest_framework import serializers, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -78,7 +78,8 @@ class RequestSerializer(serializers.ModelSerializer):
     roomCode = serializers.SerializerMethodField(read_only=True, help_text="Codul camerei")
     decided_by = serializers.CharField(source='decided_by.username', read_only=True, allow_null=True)
     
-    def get_roomCode(self, obj):
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_roomCode(self, obj) -> str | None:
         """Returnează codul camerei folosind doar room_id pentru a evita loop-uri."""
         # Folosim doar room_id pentru a evita accesarea obiectului room
         # care ar putea cauza loop-uri infinite
