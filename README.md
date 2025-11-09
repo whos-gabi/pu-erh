@@ -52,6 +52,53 @@ App runs at http://localhost:3000
 - Dockerised PostgreSQL
 - Dockerised Django API
 
+## Backend setup (in short)
+
+1) Prereqs
+- Docker + Docker Compose (recommended), or Python 3.11+ and PostgreSQL if running locally
+
+2) Environment
+```
+cd backend
+cp .env.example .env
+# Update DB settings if needed, e.g.:
+# POSTGRES_DB=bookme
+# POSTGRES_USER=bookme
+# POSTGRES_PASSWORD=bookme
+# POSTGRES_HOST=db
+# POSTGRES_PORT=5432
+# DJANGO_SECRET_KEY=change-me
+# DJANGO_DEBUG=True
+```
+
+3) Run with Docker (recommended)
+```
+# from repo root
+docker compose up -d db
+docker compose up -d backend
+
+# first-time setup (inside the backend container)
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py createsuperuser  # optional
+```
+API will be available at http://localhost:8000/ (adjust if you mapped a different port).
+
+4) Run locally (without Docker)
+```
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+```
+
+5) (Optional) Seed / analytics simulation
+```
+# Example simulation to (re)compute monthly popularity stats
+python services/databrics.py
+```
+This simulates the Databricks monthly pipeline that populates the item popularity table used by the `/api/item-occupancy-stats/stats/` route.
+
 ## Backend overview
 
 - Framework: Django + Django REST Framework
