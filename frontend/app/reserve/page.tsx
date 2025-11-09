@@ -20,6 +20,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ChartContainer } from "@/components/ui/chart";
 import { API_BASE_URL } from "@/lib/api";
 
 type SelectedSeat = {
@@ -35,6 +36,8 @@ const MapComponent = dynamic(() => import("@/components/InteractiveMap"), {
 export default function ReservePage() {
   const [selected, setSelected] = useState<SelectedSeat | null>(null);
   const [statusMap, setStatusMap] = useState<Record<string, "free" | "occupied" | "teammate">>({});
+  const [itemsMap, setItemsMap] = useState<Record<string, number>>({});
+  const [itemStats, setItemStats] = useState<any | null>(null);
   const [legendColors, setLegendColors] = useState<{ free: string; occupied: string; teammate: string; opacity: number }>({
     free: "#22c55e",
     occupied: "#ef4444",
@@ -175,6 +178,135 @@ export default function ReservePage() {
     if (activeDate) fetchAvailability(activeDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ensure items map is loaded (name -> id)
+  const ensureItemsMap = async () => {
+    if (Object.keys(itemsMap).length > 0) return itemsMap;
+    try {
+      const tokensRaw = localStorage.getItem("pu-erh:tokens");
+      const access = tokensRaw ? (JSON.parse(tokensRaw).access as string | undefined) : undefined;
+      const res = await fetch("/api/items/", {
+        headers: access ? { Authorization: `Bearer ${access}` } : undefined,
+        cache: "no-store",
+      });
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // eslint-disable-next-line no-console
+        console.log("Items (raw):", text);
+        return {};
+      }
+      const map: Record<string, number> = {};
+      if (Array.isArray(data)) {
+        for (const it of data) {
+          if (it?.name && typeof it?.id === "number") {
+            map[String(it.name)] = it.id;
+          }
+        }
+      } else if (Array.isArray(data?.results)) {
+        for (const it of data.results) {
+          if (it?.name && typeof it?.id === "number") {
+            map[String(it.name)] = it.id;
+          }
+        }
+      }
+      setItemsMap(map);
+      return map;
+    } catch {
+      // eslint-disable-next-line no-console
+      console.log("Items fetch failed");
+      return {};
+    }
+  };
+
+  // On selecting any item, fetch and log occupancy stats (if it maps to an item id)
+  useEffect(() => {
+    (async () => {
+      if (!selected) return;
+      const map = await ensureItemsMap();
+      const itemId = map[selected.label];
+      if (!itemId) return;
+      try {
+        const tokensRaw = localStorage.getItem("pu-erh:tokens");
+        const access = tokensRaw ? (JSON.parse(tokensRaw).access as string | undefined) : undefined;
+        const q = new URLSearchParams({ item_id: String(itemId) }).toString();
+        const res = await fetch(`/api/item-occupancy-stats/stats/?${q}`, {
+          headers: access ? { Authorization: `Bearer ${access}` } : undefined,
+          cache: "no-store",
+        });
+        const text = await res.text();
+        try {
+          const json = JSON.parse(text);
+          // eslint-disable-next-line no-console
+          console.log("Item occupancy stats:", json);
+          setItemStats(json);
+        } catch {
+          // eslint-disable-next-line no-console
+          console.log("Item occupancy stats (raw):", text);
+          setItemStats(null);
+        }
+      } catch {
+        // eslint-disable-next-line no-console
+        console.log("Item occupancy stats fetch failed");
+        setItemStats(null);
+      }
+    })();
+    // only when selection id changes
+  }, [selected?.id]); 
+
+  const statsChartData = (() => {
+    if (!itemStats || !Array.isArray(itemStats.weekdays)) return [];
+    // Aggregate 08:00-20:00 average popularity per day; label with two-letter abbreviation
+    const hourInRange = (h: number) => h >= 8 && h <= 20;
+    const dayAbbrev = (w: string) => {
+      const map: Record<string, string> = {
+        Monday: "Mo",
+        Tuesday: "Tu",
+        Wednesday: "We",
+        Thursday: "Th",
+        Friday: "Fr",
+        Saturday: "Sa",
+        Sunday: "Su",
+      };
+      return map[w] || (w || "").slice(0, 2);
+    };
+    return itemStats.weekdays.map((d: any) => {
+      const hrs = Array.isArray(d.hours) ? d.hours.filter((h: any) => hourInRange(Number(h.hour))) : [];
+      const avg =
+        hrs.length > 0
+          ? Math.round(
+              (hrs.reduce((sum: number, h: any) => sum + Number(h.popularity || 0), 0) / hrs.length) * 10
+            ) / 10
+          : 0;
+      return { day: dayAbbrev(String(d.weekday || "")), value: avg };
+    });
+  })();
+
+  const StatsBars = ({ data }: { data: Array<{ day: string; value: number }> }) => {
+    if (!data || data.length === 0) return null;
+    return (
+      <ChartContainer className="min-h-[160px] w-full">
+        <div className="flex w-full items-end justify-between gap-3 px-2 pb-2">
+          {data.map((d) => (
+            <div key={d.day} className="flex flex-col items-center justify-end gap-2">
+              <div className="h-[120px] w-6 rounded-sm bg-muted relative overflow-hidden">
+                <div
+                  className="absolute bottom-0 left-0 right-0 rounded-t-sm"
+                  style={{
+                    height: `${Math.max(0, Math.min(100, d.value))}%`,
+                    backgroundColor: "#a855f7",
+                  }}
+                />
+              </div>
+              <span className="text-[11px] text-muted-foreground">{d.day}</span>
+            </div>
+          ))}
+        </div>
+      </ChartContainer>
+    );
+  };
 
   const getSelectedStatus = (): { kind: "free" | "occupied" | "teammate" | "unknown"; label: string; color: string } => {
     if (!selected) return { kind: "unknown", label: "Unknown", color: legendColors.occupied };
@@ -438,8 +570,8 @@ export default function ReservePage() {
                 }}
               />
             </div>
-            <SheetHeader>
-              <SheetTitle>Reserve seat</SheetTitle>
+            <SheetHeader className="py-0">
+              <SheetTitle className="text-2xl md:text-3xl">Reserve Seat</SheetTitle>
               <SheetDescription className="sr-only">Reservation details</SheetDescription>
             </SheetHeader>
             <div className="p-2">
@@ -468,6 +600,12 @@ export default function ReservePage() {
                       </Alert>
                     );
                   })()}
+                  {statsChartData.length > 0 ? (
+                    <div className="space-y-1">
+                      <div className="text-base font-semibold">Popularity Stats</div>
+                      <StatsBars data={statsChartData} />
+                    </div>
+                  ) : null}
                   {(() => {
                     const s = getSelectedStatus();
                     if (!needsApproval || s.kind !== "free") return null;
@@ -573,6 +711,12 @@ export default function ReservePage() {
                       </Alert>
                     );
                   })()}
+                  {statsChartData.length > 0 ? (
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">Popularity Stats</div>
+                      <StatsBars data={statsChartData} />
+                    </div>
+                  ) : null}
                   {(() => {
                     const s = getSelectedStatus();
                     if (needsApproval && s.kind === "free") {
