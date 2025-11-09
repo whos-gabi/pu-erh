@@ -9,7 +9,6 @@ from .models import (
     User,
     RoomCategory,
     Room,
-    ItemCategory,
     Item,
     Request,
     Appointment,
@@ -72,26 +71,18 @@ class RoomAdmin(admin.ModelAdmin):
     search_fields = ('code', 'name')
 
 
-@admin.register(ItemCategory)
-class ItemCategoryAdmin(admin.ModelAdmin):
-    """Admin for ItemCategory model."""
-    list_display = ('name', 'slug')
-    prepopulated_fields = {'slug': ('name',)}
-    search_fields = ('name', 'slug')
-
-
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
     """Admin for Item model."""
-    list_display = ('id', 'name', 'category', 'room', 'status')
-    list_filter = ('status', 'category', 'room')
-    search_fields = ('name', 'room__code', 'room__name')
+    list_display = ('id', 'name', 'status')
+    list_filter = ('status',)
+    search_fields = ('name',)
 
 
 @admin.register(Request)
 class RequestAdmin(admin.ModelAdmin):
     """Admin for Request model."""
-    list_display = ('id', 'room', 'user', 'status', 'date_start', 'date_end', 'created_at', 'decided_by')
+    list_display = ('id', 'room', 'user', 'status', 'start_date', 'end_date', 'created_at', 'decided_by')
     list_filter = ('status', 'created_at')
     search_fields = ('room__code', 'user__username')
     readonly_fields = ('created_at', 'status_changed_at')
@@ -100,8 +91,8 @@ class RequestAdmin(admin.ModelAdmin):
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
     """Admin for Appointment model."""
-    list_display = ('id', 'item', 'user', 'start_at', 'end_at', 'created_at')
-    list_filter = ('start_at', 'created_at')
+    list_display = ('id', 'item', 'user', 'start_date', 'end_date', 'created_at')
+    list_filter = ('start_date', 'created_at')
     search_fields = ('item__name', 'user__username')
-    readonly_fields = ('created_at', 'time_range')
+    readonly_fields = ('created_at',)
 

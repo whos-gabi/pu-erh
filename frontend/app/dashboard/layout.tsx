@@ -21,7 +21,7 @@ export default function RootLayout({
 
     console.log(session.user.is_superuser);
     if (session.user.is_superuser) {
-      router.push("/dashboard");
+      // router.push("/dashboard");
     } else {
       router.push("/account");
     }

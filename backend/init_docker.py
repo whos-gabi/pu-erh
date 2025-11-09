@@ -38,15 +38,20 @@ def main():
         else:
             print("   [i] Superadmin există deja, skip...")
     
-    print("📦 Creez date de test...")
-    try:
-        # Folosim --clear pentru a șterge datele vechi și a crea altele noi
-        call_command('seed_data', '--clear', verbosity=1)
-    except Exception as e:
-        # Dacă seed_data eșuează (ex: date deja existente sau suprapuneri),
-        # continuăm oricum - aplicația poate funcționa fără date de test
-        print(f"   [!] Avertisment: seed_data a eșuat: {e}")
-        print("   [i] Continuăm oricum - aplicația poate funcționa fără date de test")
+    # Controlează rularea seed-ului prin env: SEED_DATA=True/False (default: True în dev)
+    seed_flag = os.environ.get('SEED_DATA', 'True').lower() in ('1', 'true', 'yes', 'on')
+    if seed_flag:
+        print("📦 Creez date de test...")
+        try:
+            # Folosim --clear pentru a șterge datele vechi și a crea altele noi
+            call_command('seed_data', '--clear', verbosity=1)
+        except Exception as e:
+            # Dacă seed_data eșuează (ex: date deja existente sau suprapuneri),
+            # continuăm oricum - aplicația poate funcționa fără date de test
+            print(f"   [!] Avertisment: seed_data a eșuat: {e}")
+            print("   [i] Continuăm oricum - aplicația poate funcționa fără date de test")
+    else:
+        print("🛑 SKIP seed_data: SEED_DATA este dezactivat în environment")
     
     print("✅ Inițializare completă!")
     print("")

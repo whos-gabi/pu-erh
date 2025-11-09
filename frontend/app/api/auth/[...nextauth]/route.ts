@@ -2,9 +2,8 @@
 import NextAuth, { NextAuthOptions, Session, User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
-import axios from "axios";
 import { jwtDecode } from "jwt-decode";
-import { API_BASE_URL } from "@/lib/api";
+import axiosInstance from "@/app/componente/axiosInstance";
 
 // Define our user type
 export interface MyUser extends User {
@@ -34,7 +33,7 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.username || !credentials?.password) return null;
 
         try {
-          const res = await axios.post(`${API_BASE_URL}api/auth/login/`, {
+          const res = await axiosInstance.post("api/auth/login/", {
             username: credentials.username,
             password: credentials.password,
           });

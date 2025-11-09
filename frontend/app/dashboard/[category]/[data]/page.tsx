@@ -8,13 +8,22 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import Tabele from "../componente/Tabele";
-import Sortare from "../componente/Sortare";
-import axiosInstance from "../componente/axiosInstance";
+import Tabele from "../../../componente/Tabele";
+import Sortare from "../../../componente/Sortare";
+import axiosInstance from "../../../componente/axiosInstance";
 import { getSession } from "next-auth/react";
 import axios from "axios";
 
-export default function Page() {
+type Props = {
+  data: string;
+  category: string;
+};
+
+export default function Page({
+  params,
+}: {
+  params: { category: string; data: string };
+}) {
   const [date, setDate] = useState<Date | undefined>(new Date(2025, 5, 12));
   const [selectedSort, setSelectedSort] = useState<string>("");
 

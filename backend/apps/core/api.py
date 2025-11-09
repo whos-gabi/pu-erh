@@ -12,7 +12,6 @@ from .models import (
     Team,
     RoomCategory,
     Room,
-    ItemCategory,
     Item,
     Request,
     Appointment,
@@ -62,69 +61,124 @@ class RoomSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Room
-        fields = ['id', 'code', 'name', 'category', 'category_name', 'capacity', 'features']
-
-
-class ItemCategorySerializer(serializers.ModelSerializer):
-    """Serializer for ItemCategory model."""
-    class Meta:
-        model = ItemCategory
-        fields = ['id', 'name', 'slug', 'description']
+        fields = ['id', 'code', 'name', 'category', 'category_name', 'capacity']
 
 
 class ItemSerializer(serializers.ModelSerializer):
     """Serializer for Item model."""
-    room = serializers.PrimaryKeyRelatedField(
-        queryset=Room.objects.all(),
-        required=False,
-        allow_null=True
-    )
-    category = serializers.PrimaryKeyRelatedField(queryset=ItemCategory.objects.all())
-    room_code = serializers.CharField(source='room.code', read_only=True, allow_null=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    
     class Meta:
         model = Item
-        fields = ['id', 'room', 'room_code', 'category', 'category_name', 'name', 'status', 'meta']
+        fields = ['id', 'name', 'status', 'meta']
 
 
 class RequestSerializer(serializers.ModelSerializer):
     """Serializer for Request model."""
-    user = serializers.StringRelatedField(read_only=True)
-    room = serializers.PrimaryKeyRelatedField(queryset=Room.objects.all())
-    room_code = serializers.CharField(source='room.code', read_only=True)
-    room_name = serializers.CharField(source='room.name', read_only=True)
-    room_category_id = serializers.IntegerField(source='room.category.id', read_only=True)
-    room_category_name = serializers.CharField(source='room.category.name', read_only=True)
-    decided_by = serializers.StringRelatedField(read_only=True)
+    user = serializers.CharField(source='user.username', read_only=True)
+    room_code = serializers.CharField(write_only=True, help_text="Codul camerei (ex: 'meetingRoom1', 'beerPointArea', 'meetingLarge1')")
+    roomCode = serializers.SerializerMethodField(read_only=True, help_text="Codul camerei")
+    decided_by = serializers.CharField(source='decided_by.username', read_only=True, allow_null=True)
+    
+    def get_roomCode(self, obj):
+        """Returnează codul camerei folosind doar room_id pentru a evita loop-uri."""
+        # Folosim doar room_id pentru a evita accesarea obiectului room
+        # care ar putea cauza loop-uri infinite
+        if not hasattr(obj, 'room_id') or not obj.room_id:
+            return None
+        
+        # Folosim cache-ul din context pentru a evita query-uri multiple
+        if hasattr(self, '_room_cache'):
+            room_cache = self._room_cache
+        else:
+            room_cache = {}
+            self._room_cache = room_cache
+        
+        # Dacă avem room_id în cache, folosim-l
+        if obj.room_id in room_cache:
+            return room_cache[obj.room_id]
+        
+        # Dacă nu, încercăm să obținem codul direct din baza de date
+        # fără a accesa obiectul room
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT code FROM core_room WHERE id = %s", [obj.room_id])
+                row = cursor.fetchone()
+                if row:
+                    code = row[0]
+                    room_cache[obj.room_id] = code
+                    return code
+        except Exception:
+            pass
+        
+        return None
     
     class Meta:
         model = Request
         fields = [
-            'id', 'user', 'room', 'room_code', 'room_name', 
-            'room_category_id', 'room_category_name',
-            'status', 'date_start', 'date_end', 'created_at', 'status_changed_at', 'decided_by', 'note'
+            'id', 'user', 'roomCode', 'room_code',
+            'status', 'start_date', 'end_date', 'created_at', 'status_changed_at', 'decided_by', 'note'
         ]
-        read_only_fields = ['user', 'created_at', 'status_changed_at', 'decided_by']
+        read_only_fields = ['user', 'status', 'created_at', 'status_changed_at', 'decided_by']
+    
+    def validate_room_code(self, value):
+        """Validează că camera cu acest cod există."""
+        try:
+            room = Room.objects.get(code=value)
+            if not hasattr(room, 'category') or not room.category:
+                raise serializers.ValidationError(f"Camera '{room.name}' nu are o categorie asociată.")
+            return value
+        except Room.DoesNotExist:
+            raise serializers.ValidationError(f"Camera cu codul '{value}' nu există.")
+    
+    def create(self, validated_data):
+        """Creează request-ul folosind room_code."""
+        room_code = validated_data.pop('room_code')
+        room = Room.objects.get(code=room_code)
+        validated_data['room'] = room
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """Actualizează request-ul folosind room_code dacă este furnizat."""
+        if 'room_code' in validated_data:
+            room_code = validated_data.pop('room_code')
+            room = Room.objects.get(code=room_code)
+            validated_data['room'] = room
+        return super().update(instance, validated_data)
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
     """Serializer for Appointment model."""
-    item = serializers.PrimaryKeyRelatedField(queryset=Item.objects.all())
-    item_name = serializers.CharField(source='item.name', read_only=True)
-    item_category = serializers.PrimaryKeyRelatedField(source='item.category', read_only=True)
-    item_category_name = serializers.CharField(source='item.category.name', read_only=True)
-    request = serializers.PrimaryKeyRelatedField(
-        queryset=Request.objects.all(),
-        required=False,
-        allow_null=True
-    )
+    item_name = serializers.CharField(write_only=True, help_text="Numele item-ului (ex: 'LT-001', 'MON-001')")
+    item = serializers.PrimaryKeyRelatedField(read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
     
     class Meta:
         model = Appointment
-        fields = ['id', 'user', 'username', 'item', 'item_name', 'item_category', 'item_category_name', 'start_at', 'end_at', 'created_at', 'request']
-        read_only_fields = ['created_at']
+        fields = ['id', 'user', 'username', 'item', 'item_name', 'start_date', 'end_date', 'created_at']
+        read_only_fields = ['user', 'item', 'created_at']
+    
+    def validate_item_name(self, value):
+        """Validează că item-ul cu acest nume există."""
+        try:
+            Item.objects.get(name=value)
+            return value
+        except Item.DoesNotExist:
+            raise serializers.ValidationError(f"Item-ul cu numele '{value}' nu există.")
+    
+    def create(self, validated_data):
+        """Creează appointment-ul folosind item_name."""
+        item_name = validated_data.pop('item_name')
+        item = Item.objects.get(name=item_name)
+        validated_data['item'] = item
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """Actualizează appointment-ul folosind item_name dacă este furnizat."""
+        if 'item_name' in validated_data:
+            item_name = validated_data.pop('item_name')
+            item = Item.objects.get(name=item_name)
+            validated_data['item'] = item
+        return super().update(instance, validated_data)
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -337,33 +391,6 @@ class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
     permission_classes = [IsAuthenticated]
-    
-    def get_permissions(self):
-        """Permisiuni diferite pentru acțiuni diferite."""
-        if self.action in ['create', 'update', 'destroy']:
-            return [IsSuperAdmin()]
-        return super().get_permissions()
-
-
-@extend_schema_view(
-    list=extend_schema(tags=['ItemCategories'], summary='Listează toate categoriile'),
-    retrieve=extend_schema(tags=['ItemCategories'], summary='Obține detalii despre o categorie'),
-    create=extend_schema(tags=['ItemCategories'], summary='Creează o categorie nouă'),
-    update=extend_schema(tags=['ItemCategories'], summary='Actualizează o categorie'),
-    destroy=extend_schema(tags=['ItemCategories'], summary='Șterge o categorie'),
-)
-class ItemCategoryViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet pentru gestionarea categoriilor de inventar.
-    
-    Permisiuni:
-    - GET: toți utilizatorii autentificați
-    - POST/PUT/DELETE: doar SUPERADMIN
-    """
-    queryset = ItemCategory.objects.all()
-    serializer_class = ItemCategorySerializer
-    permission_classes = [IsAuthenticated]
-    lookup_field = 'slug'  # Folosim slug în loc de id pentru URL-uri mai frumoase
     
     def get_permissions(self):
         """Permisiuni diferite pentru acțiuni diferite."""

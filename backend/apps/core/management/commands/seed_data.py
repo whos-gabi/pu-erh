@@ -18,7 +18,6 @@ from apps.core.models import (
     Team,
     RoomCategory,
     Room,
-    ItemCategory,
     Item,
     Request,
     Appointment,
@@ -50,20 +49,18 @@ class Command(BaseCommand):
         users = self.create_users(teams, roles)
         room_categories = self.create_room_categories()
         rooms = self.create_rooms(room_categories)
-        categories = self.create_item_categories()
-        items = self.create_items(rooms, categories)
+        items = self.create_items()
         requests = self.create_requests(users, rooms)
         appointments = self.create_appointments(users, items, requests)
         
         self.stdout.write(self.style.SUCCESS('\n[OK] Date de test create cu succes!'))
-        self.print_summary(roles, teams, users, room_categories, rooms, categories, items, requests, appointments)
+        self.print_summary(roles, teams, users, room_categories, rooms, items, requests, appointments)
 
     def clear_data(self):
         """Șterge toate datele (păstrând doar superadmin)."""
         Appointment.objects.all().delete()
         Request.objects.all().delete()
         Item.objects.all().delete()
-        ItemCategory.objects.all().delete()
         Room.objects.all().delete()
         RoomCategory.objects.all().delete()
         # Nu ștergem User-ii (păstrăm superadmin)
@@ -217,64 +214,55 @@ class Command(BaseCommand):
                 'code': 'tr1',
                 'name': 'Training Room 1',
                 'category': training_category,
-                'capacity': 18,
-                'features': {'projector': True, 'whiteboard': True}
+                'capacity': 18
             },
             {
                 'code': 'tr2',
                 'name': 'Training Room 2',
                 'category': training_category,
-                'capacity': 19,
-                'features': {'projector': True, 'whiteboard': True}
+                'capacity': 19
             },
             {
                 'code': 'mr1',
                 'name': 'Meeting Room 1',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'mr2',
                 'name': 'Meeting Room 2',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'mr3',
                 'name': 'Meeting Room 3',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'mr4',
                 'name': 'Meeting Room 4',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'mr5',
                 'name': 'Meeting Room 5',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'mr6',
                 'name': 'Meeting Room 6',
                 'category': meeting_category,
-                'capacity': 4,
-                'features': {}
+                'capacity': 4
             },
             {
                 'code': 'bp',
                 'name': 'Beer Point',
                 'category': beer_category,
-                'capacity': 100,
-                'features': {'beer_tap': True, 'snacks': True, 'fridge': True}
+                'capacity': 100
             }
         ]
         
@@ -291,53 +279,21 @@ class Command(BaseCommand):
         
         return rooms
 
-    def create_item_categories(self):
-        """Creează categorii de inventar."""
-        self.stdout.write('  [*] Creez categorii de inventar...')
-        
-        categories_data = [
-            {'name': 'Laptop', 'slug': 'laptop', 'description': 'Laptop-uri pentru lucru'},
-            {'name': 'Monitor', 'slug': 'monitor', 'description': 'Monitoare externe'},
-            {'name': 'Proiector', 'slug': 'projector', 'description': 'Proiectoare pentru prezentari'},
-            {'name': 'Tableta', 'slug': 'tablet', 'description': 'Tablete pentru prezentari'},
-            {'name': 'Mouse', 'slug': 'mouse', 'description': 'Mouse-uri wireless'},
-        ]
-        
-        categories = []
-        for cat_data in categories_data:
-            slug = cat_data.pop('slug')
-            category, created = ItemCategory.objects.get_or_create(
-                slug=slug,
-                defaults=cat_data
-            )
-            categories.append(category)
-            if created:
-                self.stdout.write(f'    [+] Creat: {category.name}')
-        
-        return categories
-
-    def create_items(self, rooms, categories):
+    def create_items(self):
         """Creează item-uri de inventar."""
         self.stdout.write('  [*] Creez item-uri de inventar...')
         
         items_data = [
-            # Laptop-uri
-            {'name': 'LT-001', 'room': rooms[0], 'category': categories[0], 'status': Item.ACTIVE},
-            {'name': 'LT-002', 'room': rooms[0], 'category': categories[0], 'status': Item.ACTIVE},
-            {'name': 'LT-003', 'room': rooms[1], 'category': categories[0], 'status': Item.ACTIVE},
-            {'name': 'LT-004', 'room': rooms[2], 'category': categories[0], 'status': Item.ACTIVE},
-            {'name': 'LT-005', 'room': rooms[3], 'category': categories[0], 'status': Item.BROKEN},  # Broken pentru testare
-            
-            # Monitoare
-            {'name': 'MON-001', 'room': rooms[2], 'category': categories[1], 'status': Item.ACTIVE},
-            {'name': 'MON-002', 'room': rooms[3], 'category': categories[1], 'status': Item.ACTIVE},
-            
-            # Proiectoare
-            {'name': 'PROJ-001', 'room': rooms[0], 'category': categories[2], 'status': Item.ACTIVE},
-            {'name': 'PROJ-002', 'room': rooms[1], 'category': categories[2], 'status': Item.ACTIVE},
-            
-            # Tablete
-            {'name': 'TAB-001', 'room': rooms[0], 'category': categories[3], 'status': Item.ACTIVE},
+            {'name': 'LT-001', 'status': Item.ACTIVE},
+            {'name': 'LT-002', 'status': Item.ACTIVE},
+            {'name': 'LT-003', 'status': Item.ACTIVE},
+            {'name': 'LT-004', 'status': Item.ACTIVE},
+            {'name': 'LT-005', 'status': Item.BROKEN},  # Broken pentru testare
+            {'name': 'MON-001', 'status': Item.ACTIVE},
+            {'name': 'MON-002', 'status': Item.ACTIVE},
+            {'name': 'PROJ-001', 'status': Item.ACTIVE},
+            {'name': 'PROJ-002', 'status': Item.ACTIVE},
+            {'name': 'TAB-001', 'status': Item.ACTIVE},
         ]
         
         items = []
@@ -349,7 +305,7 @@ class Command(BaseCommand):
             )
             items.append(item)
             if created:
-                self.stdout.write(f'    [+] Creat: {item.name} ({item.category.name}) in {item.room.code}')
+                self.stdout.write(f'    [+] Creat: {item.name}')
         
         return items
 
@@ -372,8 +328,8 @@ class Command(BaseCommand):
                 user=user,
                 room=rooms[i % len(rooms)],
                 status=Request.WAITING,
-                date_start=now + timedelta(days=i+1),
-                date_end=now + timedelta(days=i+1, hours=4),
+                start_date=now + timedelta(days=i+1, hours=9),
+                end_date=now + timedelta(days=i+1, hours=11),
                 note=f'Cerere de test #{i+1}',
             )
             requests.append(request)
@@ -385,8 +341,8 @@ class Command(BaseCommand):
                 user=user,
                 room=rooms[(i+1) % len(rooms)],
                 status=Request.APPROVED,
-                date_start=now + timedelta(days=i+2),
-                date_end=now + timedelta(days=i+2, hours=4),
+                start_date=now + timedelta(days=i+2, hours=10),
+                end_date=now + timedelta(days=i+2, hours=12),
                 decided_by=superadmin,
                 note=f'Cerere aprobata #{i+1}',
             )
@@ -399,8 +355,8 @@ class Command(BaseCommand):
                 user=users[2],
                 room=rooms[2],
                 status=Request.DISMISSED,
-                date_start=now + timedelta(days=3),
-                date_end=now + timedelta(days=3, hours=4),
+                start_date=now + timedelta(days=3, hours=14),
+                end_date=now + timedelta(days=3, hours=16),
                 decided_by=superadmin,
                 note='Cerere respinsa pentru testare',
             )
@@ -418,53 +374,45 @@ class Command(BaseCommand):
         
         # Programări în trecut (finalizate)
         for i, user in enumerate(users[:2]):
-            start_at = now - timedelta(days=2, hours=10-i)
-            end_at = start_at + timedelta(hours=1)
+            start_date = now - timedelta(days=2+i, hours=10-i)
+            end_date = start_date + timedelta(hours=2)
             item = items[i % len(items)]
             
             appointment = Appointment.objects.create(
                 user=user,
                 item=item,
-                start_at=start_at,
-                end_at=end_at,
+                start_date=start_date,
+                end_date=end_date,
             )
             appointments.append(appointment)
             self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (trecut)')
         
         # Programări în prezent (active)
         for i, user in enumerate(users[1:3]):
-            start_at = now - timedelta(minutes=30)
-            end_at = now + timedelta(hours=1)
+            start_date = now - timedelta(minutes=30)
+            end_date = now + timedelta(hours=1)
             item = items[(i+2) % len(items)]
             
             appointment = Appointment.objects.create(
                 user=user,
                 item=item,
-                start_at=start_at,
-                end_at=end_at,
+                start_date=start_date,
+                end_date=end_date,
             )
             appointments.append(appointment)
             self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (activ)')
         
         # Programări în viitor
         for i, user in enumerate(users[:2]):
-            start_at = now + timedelta(days=1, hours=10+i)
-            end_at = start_at + timedelta(hours=2)
+            start_date = now + timedelta(days=i+1, hours=9+i)
+            end_date = start_date + timedelta(hours=2)
             item = items[(i+4) % len(items)]
-            
-            # Asociază cu o cerere aprobată dacă există
-            approved_request = None
-            if requests:
-                approved_requests = [r for r in requests if r.status == Request.APPROVED]
-                if approved_requests:
-                    approved_request = approved_requests[i % len(approved_requests)]
             
             appointment = Appointment.objects.create(
                 user=user,
                 item=item,
-                start_at=start_at,
-                end_at=end_at,
-                request=approved_request,
+                start_date=start_date,
+                end_date=end_date,
             )
             appointments.append(appointment)
             self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (viitor)')
@@ -476,7 +424,7 @@ class Command(BaseCommand):
         
         return appointments
 
-    def print_summary(self, roles, teams, users, room_categories, rooms, categories, items, requests, appointments):
+    def print_summary(self, roles, teams, users, room_categories, rooms, items, requests, appointments):
         """Afișează un rezumat al datelor create."""
         self.stdout.write('\n' + '=' * 60)
         self.stdout.write(self.style.SUCCESS('REZUMAT DATE CREATE:'))
@@ -486,7 +434,6 @@ class Command(BaseCommand):
         self.stdout.write(f'  Users (Employee): {len(users)}')
         self.stdout.write(f'  Room Categories: {len(room_categories)}')
         self.stdout.write(f'  Rooms: {len(rooms)}')
-        self.stdout.write(f'  Item Categories: {len(categories)}')
         self.stdout.write(f'  Items: {len(items)}')
         self.stdout.write(f'  Requests: {len(requests)}')
         self.stdout.write(f'  Appointments: {len(appointments)}')
