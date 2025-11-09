@@ -152,11 +152,12 @@ export default function Page() {
         </Button>
       </div>
       <Sortare
-        totalCount={123} // number of results
-        tabel="bijuterii" // table or category
-        id="inele" // current selected category
+        totalCount={123}
+        tabel="requests"
+        id="meetingroom"
         selectedSort={selectedSort}
         setSelectedSort={setSelectedSort}
+        dateFromPathname={formatDateForUrl(date)}
       />
       <Tabele dat={[]} />
     </div>
