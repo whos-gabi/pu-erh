@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from django.db.models import Q, Count
 from django.db.models.functions import TruncDate
 
-from .models import Request, Appointment, ItemCategory, OrgPolicy
+from .models import Request, Appointment, OrgPolicy
 from .api import RequestSerializer, AppointmentSerializer
 from .permissions import IsSuperAdmin, IsOwnerOrSuperAdmin
 from apps.notify.services import (
@@ -269,19 +269,10 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Găsește categoria "birou"
-        try:
-            desk_category = ItemCategory.objects.get(slug='birou')
-        except ItemCategory.DoesNotExist:
-            return Response(
-                {'error': 'Categoria "birou" nu există. Creează o categorie cu slug="birou"'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Găsește toate appointment-urile pentru birouri în ziua specificată
+        # Găsește toate appointment-urile în ziua specificată
+        # Notă: ItemCategory a fost eliminat, deci nu mai filtram după categorie
         appointments_on_date = Appointment.objects.filter(
-            item__category=desk_category,
-            start_at__date=target_date
+            start_date__date=target_date
         ).select_related('user', 'item', 'user__team')
         
         # Calculează săptămâna de lucru (Luni-Vineri)
@@ -309,16 +300,15 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         users_with_appointments = set(apt.user for apt in appointments_on_date)
         
         for user in users_with_appointments:
-            # Găsește toate appointment-urile pentru birouri ale userului în săptămâna de lucru (Luni-Vineri)
+            # Găsește toate appointment-urile ale userului în săptămâna de lucru (Luni-Vineri)
             week_appointments = Appointment.objects.filter(
                 user=user,
-                item__category=desk_category,
-                start_at__date__gte=week_start,
-                start_at__date__lte=week_end
+                start_date__date__gte=week_start,
+                start_date__date__lte=week_end
             )
             
             # Numără zilele distincte în care userul are cel puțin o rezervare
-            distinct_days = week_appointments.values('start_at__date').distinct().count()
+            distinct_days = week_appointments.values('start_date__date').distinct().count()
             
             # Determină required_days pentru user (team override → org default)
             if user.team:
@@ -341,8 +331,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
                         {
                             'id': apt.id,
                             'item': apt.item.name,
-                            'start_at': apt.start_at.isoformat(),
-                            'end_at': apt.end_at.isoformat(),
+                            'start_date': apt.start_date.isoformat(),
+                            'end_date': apt.end_date.isoformat(),
                         }
                         for apt in appointments_on_date.filter(user=user)
                     ]
@@ -431,16 +421,16 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         
         # Filtrează appointment-urile din ziua specificată
         appointments = Appointment.objects.filter(
-            start_at__date=target_date
-        ).select_related('user', 'item', 'item__category', 'request')
+            start_date__date=target_date
+        ).select_related('user', 'item')
         
         # Filtrează request-urile approved din ziua specificată
-        # Un request este relevant dacă date_start sau date_end se suprapun cu ziua target
+        # Un request este relevant dacă start_date sau end_date se suprapun cu ziua target
         approved_requests = Request.objects.filter(
             status=Request.APPROVED
         ).filter(
-            date_start__date__lte=target_date,
-            date_end__date__gte=target_date
+            start_date__date__lte=target_date,
+            end_date__date__gte=target_date
         ).select_related('user', 'room', 'room__category', 'decided_by')
         
         # Aplică permisiunile: Employee vede doar propriile, SUPERADMIN vede toate
@@ -537,20 +527,20 @@ class AvailabilityViewSet(viewsets.ViewSet):
             )
         
         # Obține toate items și rooms
-        all_items = Item.objects.filter(status=Item.ACTIVE).select_related('room', 'category')
+        all_items = Item.objects.filter(status=Item.ACTIVE)
         all_rooms = Room.objects.all().select_related('category')
         
         # Obține appointments pentru ziua specificată
         appointments = Appointment.objects.filter(
-            start_at__date=target_date
+            start_date__date=target_date
         ).select_related('user', 'item')
         
         # Obține approved requests pentru ziua specificată
         approved_requests = Request.objects.filter(
             status=Request.APPROVED
         ).filter(
-            date_start__date__lte=target_date,
-            date_end__date__gte=target_date
+            start_date__date__lte=target_date,
+            end_date__date__gte=target_date
         ).select_related('user', 'room')
         
         # Verifică dacă user-ul are teammates (din aceeași echipă)

@@ -184,13 +184,12 @@ class UserViewSet(viewsets.ModelViewSet):
         
         # Obține toate appointment-urile și request-urile utilizatorului
         now = timezone.now()
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        today = now.date()
         
         # Appointments - include toate
         all_appointments = Appointment.objects.filter(
             user=instance
-        ).select_related('item', 'item__category', 'request', 'user')
+        ).select_related('item', 'user')
         
         # Requests - include toate indiferent de status
         all_requests = Request.objects.filter(
@@ -198,11 +197,14 @@ class UserViewSet(viewsets.ModelViewSet):
         ).select_related('room', 'room__category', 'decided_by')
         
         # Organizează appointments în trecut/azi/viitor
-        past_appointments = all_appointments.filter(end_at__lt=today_start)
+        today = now.date()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        past_appointments = all_appointments.filter(end_date__lt=today_start)
         today_appointments = all_appointments.filter(
-            start_at__date=now.date()
+            start_date__date=today
         )
-        future_appointments = all_appointments.filter(start_at__gt=today_end)
+        future_appointments = all_appointments.filter(start_date__gt=today_end)
         
         # Serializează appointments și adaugă numele item-ului
         def format_appointment(apt):
@@ -215,13 +217,16 @@ class UserViewSet(viewsets.ModelViewSet):
         today_appointments_data = [format_appointment(apt) for apt in today_appointments]
         future_appointments_data = [format_appointment(apt) for apt in future_appointments]
         
-        # Organizează requests în trecut/azi/viitor (bazat pe date_start)
-        past_requests = all_requests.filter(date_end__lt=today_start)
+        # Organizează requests în trecut/azi/viitor (bazat pe start_date)
+        today = now.date()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        past_requests = all_requests.filter(end_date__lt=today_start)
         today_requests = all_requests.filter(
-            date_start__date__lte=now.date(),
-            date_end__date__gte=now.date()
+            start_date__date__lte=today,
+            end_date__date__gte=today
         )
-        future_requests = all_requests.filter(date_start__gt=today_end)
+        future_requests = all_requests.filter(start_date__gt=today_end)
         
         # Serializează requests și adaugă numele room-ului
         def format_request(req):
@@ -323,16 +328,16 @@ class UserViewSet(viewsets.ModelViewSet):
         # Filtrează appointments din ziua specificată
         appointments = Appointment.objects.filter(
             user=instance,
-            start_at__date=target_date
-        ).select_related('item', 'item__category', 'request', 'user')
+            start_date__date=target_date
+        ).select_related('item', 'user')
         
         # Filtrează requests din ziua specificată (toate statusurile)
-        # Un request este relevant dacă date_start sau date_end se suprapun cu ziua target
+        # Un request este relevant dacă start_date sau end_date se suprapun cu ziua target
         requests = Request.objects.filter(
             user=instance
         ).filter(
-            date_start__date__lte=target_date,
-            date_end__date__gte=target_date
+            start_date__date__lte=target_date,
+            end_date__date__gte=target_date
         ).select_related('room', 'room__category', 'decided_by')
         
         # Serializează și adaugă numele resursei pentru fiecare

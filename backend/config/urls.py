@@ -14,7 +14,6 @@ from apps.core.api import (
     TeamViewSet,
     RoomCategoryViewSet,
     RoomViewSet,
-    ItemCategoryViewSet,
     ItemViewSet,
 )
 from apps.core.viewsets import (
@@ -44,7 +43,6 @@ router.register(r'roles', RoleViewSet, basename='role')
 router.register(r'teams', TeamViewSet, basename='team')
 router.register(r'room-categories', RoomCategoryViewSet, basename='roomcategory')
 router.register(r'rooms', RoomViewSet, basename='room')
-router.register(r'item-categories', ItemCategoryViewSet, basename='itemcategory')
 router.register(r'items', ItemViewSet, basename='item')
 router.register(r'requests', RequestViewSet, basename='request')
 router.register(r'appointments', AppointmentViewSet, basename='appointment')
