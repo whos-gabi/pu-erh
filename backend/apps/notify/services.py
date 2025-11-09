@@ -55,7 +55,7 @@ def notify_appointment_summary(appointment):
     Apelat după ce se creează un Appointment cu succes.
     
     Args:
-        appointment: instanță Appointment (trebuie să aibă user, item, item.room)
+        appointment: instanță Appointment (trebuie să aibă user, item)
     """
     user = appointment.user
     
@@ -71,7 +71,6 @@ def notify_appointment_summary(appointment):
         payload={
             "appointment_id": appointment.id,
             "item_id": appointment.item.id,
-            "room_id": appointment.item.room.id,
         }
     )
     
@@ -84,16 +83,11 @@ def notify_appointment_summary(appointment):
         },
         "item": {
             "name": appointment.item.name,
-            "category": appointment.item.category.name if appointment.item.category else "",
         },
-        "room": {
-            "code": appointment.item.room.code,
-            "name": appointment.item.room.name,
-        },
-        "start_at": appointment.start_at.strftime('%d.%m.%Y %H:%M'),
-        "end_at": appointment.end_at.strftime('%d.%m.%Y %H:%M'),
-        "start_at_iso": appointment.start_at.isoformat(),  # Pentru compatibilitate
-        "end_at_iso": appointment.end_at.isoformat(),  # Pentru compatibilitate
+        "start_date": appointment.start_date.strftime('%d.%m.%Y %H:%M'),
+        "end_date": appointment.end_date.strftime('%d.%m.%Y %H:%M'),
+        "start_date_iso": appointment.start_date.isoformat(),  # Pentru compatibilitate
+        "end_date_iso": appointment.end_date.isoformat(),  # Pentru compatibilitate
     }
     
     # Creează mesajul în outbox (sau îl găsește dacă există deja - idempotency)

@@ -2,9 +2,8 @@ Salut {{ user.first_name }},
 
 Rezumat programare:
 
-• Obiect: {{ item.name }} ({{ item.category }})
-• Data: {{ start_at }} – {{ end_at }}
-• Locație: camera {{ room.code }} – {{ room.name }}
+• Obiect: {{ item.name }}
+• Data și ora: {{ start_date }} – {{ end_date }}
 
 Mulțumim,
 Molson Coors – Smart Appointments

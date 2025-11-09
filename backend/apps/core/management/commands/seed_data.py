@@ -10,8 +10,10 @@ Opțional, poți șterge datele existente:
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db import connection
 from datetime import timedelta
 import random
+import json
 
 from apps.core.models import (
     Role,
@@ -56,17 +58,48 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n[OK] Date de test create cu succes!'))
         self.print_summary(roles, teams, users, room_categories, rooms, items, requests, appointments)
 
+    def reset_sequences(self):
+        """Resetează secvențele (ID-urile) pentru toate tabelele."""
+        self.stdout.write('  [*] Resetez secvențele (ID-uri)...')
+        
+        with connection.cursor() as cursor:
+            # Listează toate tabelele pentru care vrem să resetăm secvențele
+            tables = [
+                'core_role',
+                'core_team',
+                'core_room_category',
+                'core_room',
+                'core_item',
+                'core_request',
+                'core_appointment',
+            ]
+            
+            for table in tables:
+                try:
+                    # Resetează secvența la 1 (pentru că am șters toate datele)
+                    cursor.execute(
+                        f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), 1, false);"
+                    )
+                    self.stdout.write(f'    [+] Resetat secvența pentru {table} la 1')
+                except Exception as e:
+                    # Dacă tabelul nu există sau nu are secvență, continuă
+                    self.stdout.write(f'    [!] Nu s-a putut reseta {table}: {e}')
+
     def clear_data(self):
         """Șterge toate datele (păstrând doar superadmin)."""
+        # Șterge în ordinea corectă (respectând dependențele)
         Appointment.objects.all().delete()
         Request.objects.all().delete()
         Item.objects.all().delete()
-        Room.objects.all().delete()
+        Room.objects.all().delete()  # Trebuie șters înainte de RoomCategory (PROTECT)
         RoomCategory.objects.all().delete()
         # Nu ștergem User-ii (păstrăm superadmin)
         Team.objects.all().delete()
         Role.objects.all().delete()
         self.stdout.write(self.style.SUCCESS('Date șterse.'))
+        
+        # Resetează secvențele (ID-uri) la 1
+        self.reset_sequences()
 
     def create_roles(self):
         """Creează roluri."""
@@ -99,6 +132,7 @@ class Command(BaseCommand):
             {'name': 'HR Department', 'manager': None},
             {'name': 'Sales Team', 'manager': None},
             {'name': 'Marketing', 'manager': None},
+            {'name': 'ML BI', 'manager': None},
         ]
         
         teams = []
@@ -145,30 +179,6 @@ class Command(BaseCommand):
                 'team': teams[0] if teams else None,
                 'role': roles[2] if len(roles) > 2 else None,  # EMPLOYEE
             },
-            {
-                'username': 'jane.smith',
-                'email': 'jane.smith@example.com',
-                'first_name': 'Jane',
-                'last_name': 'Smith',
-                'team': teams[0] if teams else None,
-                'role': roles[2] if len(roles) > 2 else None,  # EMPLOYEE
-            },
-            {
-                'username': 'bob.wilson',
-                'email': 'bob.wilson@example.com',
-                'first_name': 'Bob',
-                'last_name': 'Wilson',
-                'team': teams[1] if len(teams) > 1 else None,
-                'role': roles[2] if len(roles) > 2 else None,  # EMPLOYEE
-            },
-            {
-                'username': 'alice.brown',
-                'email': 'alice.brown@example.com',
-                'first_name': 'Alice',
-                'last_name': 'Brown',
-                'team': teams[2] if len(teams) > 2 else None,
-                'role': roles[3] if len(roles) > 3 else None,  # DEVELOPER
-            },
         ]
         
         users = []
@@ -211,55 +221,55 @@ class Command(BaseCommand):
         
         rooms_data = [
             {
-                'code': 'tr1',
+                'code': 'meetingLarge1',
                 'name': 'Training Room 1',
                 'category': training_category,
                 'capacity': 18
             },
             {
-                'code': 'tr2',
+                'code': 'meetingLarge2',
                 'name': 'Training Room 2',
                 'category': training_category,
                 'capacity': 19
             },
             {
-                'code': 'mr1',
+                'code': 'meetingRoom1',
                 'name': 'Meeting Room 1',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'mr2',
+                'code': 'meetingRoom2',
                 'name': 'Meeting Room 2',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'mr3',
+                'code': 'meetingRoom3',
                 'name': 'Meeting Room 3',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'mr4',
+                'code': 'meetingRoom4',
                 'name': 'Meeting Room 4',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'mr5',
+                'code': 'meetingRoom5',
                 'name': 'Meeting Room 5',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'mr6',
+                'code': 'meetingRoom6',
                 'name': 'Meeting Room 6',
                 'category': meeting_category,
                 'capacity': 4
             },
             {
-                'code': 'bp',
+                'code': 'beerPointArea',
                 'name': 'Beer Point',
                 'category': beer_category,
                 'capacity': 100
@@ -283,18 +293,13 @@ class Command(BaseCommand):
         """Creează item-uri de inventar."""
         self.stdout.write('  [*] Creez item-uri de inventar...')
         
-        items_data = [
-            {'name': 'LT-001', 'status': Item.ACTIVE},
-            {'name': 'LT-002', 'status': Item.ACTIVE},
-            {'name': 'LT-003', 'status': Item.ACTIVE},
-            {'name': 'LT-004', 'status': Item.ACTIVE},
-            {'name': 'LT-005', 'status': Item.BROKEN},  # Broken pentru testare
-            {'name': 'MON-001', 'status': Item.ACTIVE},
-            {'name': 'MON-002', 'status': Item.ACTIVE},
-            {'name': 'PROJ-001', 'status': Item.ACTIVE},
-            {'name': 'PROJ-002', 'status': Item.ACTIVE},
-            {'name': 'TAB-001', 'status': Item.ACTIVE},
-        ]
+        items_data = []
+        for i in range(1, 217):
+            items_data.append({
+                'name': f'scaun{i}',
+                'status': Item.ACTIVE,
+                'meta': json.dumps({"an_fabricatie": 2018})
+            })
         
         items = []
         for item_data in items_data:
@@ -310,117 +315,12 @@ class Command(BaseCommand):
         return items
 
     def create_requests(self, users, rooms):
-        """Creează cereri de rezervare."""
-        self.stdout.write('  [*] Creez cereri de rezervare...')
-        
-        superadmin = User.objects.filter(is_superuser=True).first()
-        if not superadmin:
-            self.stdout.write(self.style.WARNING('    [!] Nu exista superadmin pentru aprobare!'))
-            return []
-        
-        # Creează cereri cu statusuri diferite
         requests = []
-        now = timezone.now()
-        
-        # Cereri WAITING (în așteptare)
-        for i, user in enumerate(users[:2]):  # Primele 2 utilizatori
-            request = Request.objects.create(
-                user=user,
-                room=rooms[i % len(rooms)],
-                status=Request.WAITING,
-                start_date=now + timedelta(days=i+1, hours=9),
-                end_date=now + timedelta(days=i+1, hours=11),
-                note=f'Cerere de test #{i+1}',
-            )
-            requests.append(request)
-            self.stdout.write(f'    [+] Creat: Request {request.id} - {request.room.code} (WAITING)')
-        
-        # Cereri APPROVED (aprobate de superadmin)
-        for i, user in enumerate(users[1:3]):  # Următorii 2 utilizatori
-            request = Request.objects.create(
-                user=user,
-                room=rooms[(i+1) % len(rooms)],
-                status=Request.APPROVED,
-                start_date=now + timedelta(days=i+2, hours=10),
-                end_date=now + timedelta(days=i+2, hours=12),
-                decided_by=superadmin,
-                note=f'Cerere aprobata #{i+1}',
-            )
-            requests.append(request)
-            self.stdout.write(f'    [+] Creat: Request {request.id} - {request.room.code} (APPROVED)')
-        
-        # Cereri DISMISSED (respinse de superadmin)
-        if len(users) > 2:
-            request = Request.objects.create(
-                user=users[2],
-                room=rooms[2],
-                status=Request.DISMISSED,
-                start_date=now + timedelta(days=3, hours=14),
-                end_date=now + timedelta(days=3, hours=16),
-                decided_by=superadmin,
-                note='Cerere respinsa pentru testare',
-            )
-            requests.append(request)
-            self.stdout.write(f'    [+] Creat: Request {request.id} - {request.room.code} (DISMISSED)')
         
         return requests
 
     def create_appointments(self, users, items, requests):
-        """Creează programări."""
-        self.stdout.write('  [*] Creez programari...')
-        
-        now = timezone.now()
         appointments = []
-        
-        # Programări în trecut (finalizate)
-        for i, user in enumerate(users[:2]):
-            start_date = now - timedelta(days=2+i, hours=10-i)
-            end_date = start_date + timedelta(hours=2)
-            item = items[i % len(items)]
-            
-            appointment = Appointment.objects.create(
-                user=user,
-                item=item,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            appointments.append(appointment)
-            self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (trecut)')
-        
-        # Programări în prezent (active)
-        for i, user in enumerate(users[1:3]):
-            start_date = now - timedelta(minutes=30)
-            end_date = now + timedelta(hours=1)
-            item = items[(i+2) % len(items)]
-            
-            appointment = Appointment.objects.create(
-                user=user,
-                item=item,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            appointments.append(appointment)
-            self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (activ)')
-        
-        # Programări în viitor
-        for i, user in enumerate(users[:2]):
-            start_date = now + timedelta(days=i+1, hours=9+i)
-            end_date = start_date + timedelta(hours=2)
-            item = items[(i+4) % len(items)]
-            
-            appointment = Appointment.objects.create(
-                user=user,
-                item=item,
-                start_date=start_date,
-                end_date=end_date,
-            )
-            appointments.append(appointment)
-            self.stdout.write(f'    [+] Creat: Appointment {appointment.id} - {item.name} (viitor)')
-        
-        # Programări care se suprapun (pentru testare ExclusionConstraint)
-        # Vom crea o programare care se suprapune cu una existentă
-        # Aceasta ar trebui să eșueze dacă încercăm să o creăm manual
-        # (nu o creăm aici pentru că ar eșua)
         
         return appointments
 
@@ -449,4 +349,3 @@ class Command(BaseCommand):
         for user in users:
             self.stdout.write(f'    - {user.username} ({user.email})')
         self.stdout.write('=' * 60)
-

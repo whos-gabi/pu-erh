@@ -104,10 +104,48 @@ class MeViewSet(viewsets.ModelViewSet):
     ),
     retrieve=extend_schema(
         summary="Obține detalii despre un utilizator",
-        description="Employee poate vedea doar propriul profil. Returnează informații despre utilizator, "
-                    "inclusiv appointments și requests împărțite în trecut/prezent, categoria item-ului "
-                    "pentru fiecare appointment și request, și detalii despre echipă (echipa, coechipieri, manager).",
+        description="Orice utilizator autentificat poate accesa acest endpoint. Returnează informații despre utilizator, "
+                    "inclusiv appointments și requests împărțite în trecut/azi/viitor. "
+                    "Pentru fiecare appointment: numele item-ului. "
+                    "Pentru fiecare request: numele room-ului. "
+                    "Include toate cererile indiferent de status. "
+                    "Include detalii despre echipă (echipa, coechipieri, manager).",
         tags=['Users'],
+        responses={
+            200: {
+                'description': 'Detalii despre utilizator cu appointments și requests organizate',
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'object',
+                            'properties': {
+                                'id': {'type': 'integer'},
+                                'username': {'type': 'string'},
+                                'email': {'type': 'string'},
+                                'appointments': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'past': {'type': 'array', 'items': {'type': 'object'}},
+                                        'today': {'type': 'array', 'items': {'type': 'object'}},
+                                        'future': {'type': 'array', 'items': {'type': 'object'}}
+                                    }
+                                },
+                                'requests': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'past': {'type': 'array', 'items': {'type': 'object'}},
+                                        'today': {'type': 'array', 'items': {'type': 'object'}},
+                                        'future': {'type': 'array', 'items': {'type': 'object'}}
+                                    }
+                                },
+                                'team_details': {'type': 'object'}
+                            }
+                        }
+                    }
+                }
+            },
+            404: {'description': 'User nu a fost găsit'}
+        }
     ),
     create=extend_schema(
         summary="Creează un nou utilizator",
