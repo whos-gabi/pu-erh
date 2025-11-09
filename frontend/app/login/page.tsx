@@ -21,7 +21,10 @@ export default function LoginPage() {
         const uname = (session.user as any).username as string | undefined;
         const is_superuser = !!(session.user as any).is_superuser;
         if (access && refresh) {
-          localStorage.setItem("pu-erh:tokens", JSON.stringify({ access, refresh }));
+          localStorage.setItem(
+            "pu-erh:tokens",
+            JSON.stringify({ access, refresh })
+          );
         }
         if (user_id || uname) {
           localStorage.setItem(
@@ -33,7 +36,12 @@ export default function LoginPage() {
       } catch {}
 
       if (session.user.is_superuser) {
-        router.push("/dashboard");
+        const today = new Date();
+        const formattedDate = `${today.getFullYear()}-${(today.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-${today.getDate().toString().padStart(2, "0")}`;
+
+        router.push(`/dashboard/meetingRoom1/${formattedDate}`);
       } else {
         router.push("/account");
       }

@@ -1,13 +1,11 @@
 "use client";
-import React, { useState } from "react";
+
+import React, { useEffect, useState } from "react";
 
 type RowData = {
   id: number;
   user: string;
-  room: number;
-  room_name: string;
-  room_category_id: number;
-  room_category_name: string;
+  roomCode: string;
   status: "WAITING" | "APPROVED" | "DECLINED";
   start_date: string;
   end_date: string;
@@ -23,6 +21,9 @@ type Props = {
 
 export default function Tabele({ dat }: Props) {
   const [data, setData] = useState<RowData[]>(dat);
+  useEffect(() => {
+    setData(dat);
+  }, [dat]);
 
   async function handleStatusChange(id: number, newStatus: string) {
     setData((prevData) =>
@@ -31,8 +32,12 @@ export default function Tabele({ dat }: Props) {
       )
     );
 
-    // Example Supabase update if needed:
-    // await supabase.from("Reservations").update({ status: newStatus }).eq("id", id);
+    // Example backend update if needed:
+    // await fetch(`/api/requests/${id}`, {
+    //   method: "PATCH",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify({ status: newStatus }),
+    // });
   }
 
   const formatDate = (date: string) => {
@@ -77,16 +82,10 @@ export default function Tabele({ dat }: Props) {
                   } hover:bg-gray-100 transition duration-150 ease-in-out`}
                 >
                   <td className="px-4 py-3">{row.id}</td>
-
                   <td className="px-4 py-3">{row.user}</td>
-
                   <td className="px-4 py-3">
-                    <p className="font-medium">{row.room_name}</p>
-                    <p className="text-xs text-gray-500">
-                      {row.room_category_name}
-                    </p>
+                    <p className="font-medium">{row.roomCode}</p>
                   </td>
-
                   <td className="px-4 py-3">
                     <select
                       value={row.status}
@@ -106,7 +105,6 @@ export default function Tabele({ dat }: Props) {
                       <option value="WAITING">Waiting</option>
                     </select>
                   </td>
-
                   <td className="px-4 py-3">{formatDate(row.start_date)}</td>
                   <td className="px-4 py-3">{formatDate(row.end_date)}</td>
                 </tr>

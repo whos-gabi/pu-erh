@@ -12,14 +12,23 @@ export async function GET(req: NextRequest) {
   // Example: fetch data from your external API using the session token
   const token = session.user.token;
 
-  console.log(token);
+  const { searchParams } = new URL(req.url);
+  const room = searchParams.get("roomCode");
+  const date = searchParams.get("date");
 
-  const response = await fetch("https://api.desepticon.qzz.io/api/requests", {
+  console.log("Room:", room);
+  console.log("Date:", date);
+
+  const url = `https://api.desepticon.qzz.io/api/requests/by-room-and-date/?roomCode=${room}&date=${date}`;
+
+  const response = await fetch(url, {
+    method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       accept: "application/json",
     },
   });
+  console.log(response);
 
   const contentType = response.headers.get("content-type");
 
