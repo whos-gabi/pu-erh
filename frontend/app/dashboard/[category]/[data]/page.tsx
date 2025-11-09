@@ -142,7 +142,7 @@ export default function Page() {
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" className="px-4 py-2 border rounded-md">
-              {formatDateForDisplay(date)}
+              {formatDateForDisplay(date ?? undefined)}
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0">
