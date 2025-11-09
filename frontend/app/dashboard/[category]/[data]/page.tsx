@@ -22,7 +22,7 @@ export default function Page() {
   const urlDate = Array.isArray(urlDateParam) ? urlDateParam[0] : urlDateParam;
   console.log("Extracted URL date:", urlDate);
 
-  const [date, setDate] = useState<Date>();
+  const [date, setDate] = useState<Date | null>(null);
   const [data, setData] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [selectedSort, setSelectedSort] = useState<string>("");
@@ -55,14 +55,18 @@ export default function Page() {
   };
 
   // Previous / Next day handlers
-  const prevDay = () =>
+  const prevDay = () => {
+    const base = date ?? new Date();
     navigateToDate(
-      new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1)
+      new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1)
     );
-  const nextDay = () =>
+  };
+  const nextDay = () => {
+    const base = date ?? new Date();
     navigateToDate(
-      new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+      new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1)
     );
+  };
 
   const handleDateChange = (d: Date | undefined) => {
     if (!d) return;
@@ -144,7 +148,7 @@ export default function Page() {
           <PopoverContent className="w-auto p-0">
             <Calendar
               mode="single"
-              selected={date}
+              selected={date ?? undefined}
               onSelect={handleDateChange}
               className="rounded-lg border [--cell-size:--spacing(11)] md:[--cell-size:--spacing(12)]"
             />
